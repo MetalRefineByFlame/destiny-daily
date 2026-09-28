@@ -1,0 +1,31 @@
+# 个人档案（含出生数据/邮箱）—— 绝不入库，由 scripts/make_profile.py 从环境变量生成
+data/profile.json
+
+# 本地专属文档（含本命盘，不公开）
+docs/*.local.md
+
+# 生成的报告
+output/
+*.html
+!docs/**/*.html
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 本地环境变量（若你把授权码写在本地 .env）
+.env
+.env.*
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Cloudflare
+cloudflare/node_modules/
+cloudflare/.wrangler/
+cloudflare/.dev.vars
