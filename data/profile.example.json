@@ -1,0 +1,98 @@
+{
+  "_comment": "模板文件。真实数据不入库，请用 scripts/make_profile.py 从环境变量（GitHub Secrets）注入生成 data/profile.json。",
+
+  "name": "使用者",
+  "gender": "male",
+  "birth": {
+    "year": 1990,
+    "month": 1,
+    "day": 1,
+    "hour": 12,
+    "minute": 0
+  },
+  "birth_city": "（待填）",
+  "birth_longitude": 120.00,
+  "timezone_offset_hours": 8,
+  "gender_confirmed": false,
+  "birth_place_confirmed": false,
+
+  "wake_time": "06:30",
+  "report_time": "08:00",
+
+  "fitness": {
+    "goal": "半年增肌增重 10kg",
+    "focus": ["手臂", "肩膀", "胸部"],
+    "current_weight_kg": null,
+    "target_weight_kg": null,
+    "weekly_split": {
+      "周一": "胸 + 肱三头肌",
+      "周二": "背 + 肱二头肌",
+      "周三": "肩 + 腹肌",
+      "周四": "腿臀 + 核心",
+      "周五": "手臂专项(二头/三头/前臂)",
+      "周六": "胸肩复合 + 弱项补差",
+      "周日": "休息 / 拉伸 / 有氧30分钟"
+    },
+    "daily_protein_g_per_kg": 1.8,
+    "daily_calorie_surplus": 300
+  },
+
+  "qigong": {
+    "name": "八部金刚功",
+    "sessions_per_day": 1,
+    "time_of_day": "morning",
+    "window": "05:00~07:00（卯时）",
+    "note": "只早上练一遍，不设晚课",
+    "sections": [
+      "双手插顶利三焦",
+      "手足前后固肾腰",
+      "调理脾肤需单举",
+      "左肝右肺如射雕",
+      "回头望足去心疾",
+      "五劳七伤往后瞧",
+      "凤凰展翅周身力",
+      "两足顿顿饮嗜消"
+    ]
+  },
+
+  "invest": {
+    "crypto_exchange": "binance",
+    "crypto_alert_pct": 2.5,
+    "max_position_pct": 15,
+    "lottery_types": ["双色球", "大乐透", "快乐8"],
+    "lottery_monthly_budget_cny": 100,
+    "lottery_one_game_per_day": true,
+    "lottery_skip_threshold": 50,
+    "lottery_note": "以五门加权总分为主要参考；低于阈值直接给出「今日不建议购买」，不出号码；可参与时同一天只推一个彩种"
+  },
+
+  "career": {
+    "role": "企业经营优化顾问 / 资产配置顾问 / 银行贷款代办",
+    "business_lines": [
+      "帮客户规划优化公司运营、提升业绩",
+      "提供资产配置建议",
+      "帮助办理银行贷款"
+    ],
+    "note": "按食伤(方案输出)/财星(资产配置与回款)/官杀(银行与合规)三条线分别取象"
+  },
+
+  "study": {
+    "daily_practice": "炁体源流",
+    "domains": ["荀爽·玄秘入门", "荀爽·八字格局", "荀爽·阴符经", "荀爽·精神分析", "八字", "大六壬"],
+    "weekly_hours": 6,
+    "note": "《炁体源流》(米晶子张至顺辑) 为每日功课；B站@荀爽 视频与术数实操为轮换专题"
+  },
+
+  "family": {
+    "note": "人际板块已按六亲(父母/子女/爱人/同事/客户/朋友)分列。若补充各成员生肖或出生年份，建议可进一步个性化。",
+    "members": []
+  },
+
+  "weights": {
+    "bazi": 0.28,
+    "qimen": 0.24,
+    "liuren": 0.18,
+    "meihua": 0.15,
+    "liuyao": 0.15
+  }
+}
