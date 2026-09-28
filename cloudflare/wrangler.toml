@@ -1,0 +1,21 @@
+# Cloudflare Worker 配置 —— 每日 08:00（北京时间）触发 GitHub Actions
+#
+# 时间换算：Cron Triggers 一律按 UTC 计算。
+#   北京时间 08:00  ==  UTC 00:00
+#   北京位于 UTC+8，无夏令时，全年固定，不必随季节调整。
+#
+# 部署后在 Dashboard 或 wrangler 里设置以下变量（GITHUB_TOKEN 必须加密）：
+#   GITHUB_OWNER   GitHub 用户名，例：jianggongzi
+#   GITHUB_REPO    仓库名，例：destiny-daily
+#   GITHUB_TOKEN   Personal Access Token（fine-grained，权限：Actions=Read and write）
+#                  用 wrangler secret put GITHUB_TOKEN 写入，不要写进本文件
+
+name = "destiny-daily-scheduler"
+main = "trigger-worker.js"
+compatibility_date = "2026-09-01"
+
+[triggers]
+crons = ["0 0 * * *"]
+
+[observability]
+enabled = true
