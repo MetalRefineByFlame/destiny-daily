@@ -204,6 +204,21 @@ ul.tips li::before{content:"";position:absolute;left:5px;top:14px;width:6px;heig
 .disclaim{margin-top:22px;padding:14px 16px;border:1px dashed var(--line);border-radius:12px;
   font-size:12.4px;line-height:1.7;color:#8c8478;background:#fdfbf6}
 .foot{margin-top:14px;text-align:center;font-size:12px;color:#a09889}
+
+/* ---------- 每日一句经典 ---------- */
+.cls{padding:2px 0}
+.cls-h{display:flex;align-items:center;gap:8px;margin-bottom:11px}
+.cls-badge{display:inline-block;padding:2px 10px;border-radius:20px;
+  background:#f3ece0;color:#8a6d3b;font-size:11.8px;font-weight:700;letter-spacing:.04em}
+.cls-gz{margin-left:auto;font-size:11.6px;color:#a09889}
+.cls-quote{margin:0;padding:15px 18px;background:#fbf7ee;border-left:3px solid var(--zhu);
+  border-radius:0 10px 10px 0}
+.cls-q{font-size:16.8px;line-height:2;color:#332e28;font-weight:600;letter-spacing:.02em}
+.cls-src{margin-top:9px;font-size:12.3px;color:#96897a;text-align:right}
+.cls-zh{margin:12px 0 0;font-size:13.6px;line-height:1.9;color:#5f574c}
+.cls-note{margin-top:11px;padding:10px 14px;background:#f6f9f4;border:1px solid #e3eadd;
+  border-radius:9px;font-size:13.4px;line-height:1.8;color:#4a5a42}
+.cls-why{margin-top:10px;font-size:11.7px;color:#a09889;line-height:1.7}
 """
 
 
@@ -355,6 +370,24 @@ def _jing_notice(z: Dict) -> str:
             f'起卦：大衍之数五十，其用四十有九，三变成爻，十八变成卦。{_e(note)}</div>')
 
 
+# ---------------------------------------------------------------- 每日一句经典
+
+
+def _classic_section(c: Dict) -> str:
+    """浏览器版「每日一句经典」。"""
+    if not c:
+        return '<div class="cls-zh">今日经典未取到，不影响术数内容。</div>'
+    head = (f'<div class="cls-h"><span class="cls-badge">{_e(c["theme"])}</span>'
+            f'<span class="cls-gz">{_e(c.get("day_gz", ""))}日'
+            f'　日干属{_e(c.get("wuxing", ""))}</span></div>')
+    quote = (f'<div class="cls-quote"><div class="cls-q">{_e(c["text"])}</div>'
+             f'<div class="cls-src">—— {_e(c["book"])}·{_e(c["chapter"])}</div></div>')
+    zh = f'<div class="cls-zh"><b>白话　</b>{_e(c["zh"])}</div>'
+    note = f'<div class="cls-note"><b>今日提点　</b>{_e(c["note"])}</div>'
+    why = f'<div class="cls-why">{_e(c["why"])}</div>'
+    return f'<div class="cls">{head}{quote}{zh}{note}{why}</div>'
+
+
 # ---------------------------------------------------------------- 主渲染
 
 
@@ -501,6 +534,9 @@ def render_html(r: Dict) -> str:
                      f'<div style="font-size:15px;font-weight:600;margin-bottom:10px;color:#3f3a33">'
                      f'{_e(st["headline"])}</div>{_tips(st["plan"])}', st["score"]))
 
+    if r.get("classic"):
+        body.append(_sec("典", "每日一句经典", _classic_section(r["classic"])))
+
     checks = "".join(
         f'<div class="chk"><span class="boxf"></span><span class="t">{_e(c["task"])}</span>'
         f'<span class="tag">{_e(c["tag"])}</span></div>' for c in r["checklist"])
@@ -618,6 +654,13 @@ def render_text(r: Dict) -> str:
     for t in r["study"]["plan"]:
         L.append(f"  · {t}")
     L.append("")
+    if r.get("classic"):
+        try:
+            from .classic import render_classic_text as _rct
+            L.append(_rct(r["classic"]))
+            L.append("")
+        except Exception:        # noqa: BLE001
+            pass
     L.append("【今日打卡】")
     for c in r["checklist"]:
         L.append(f"  ☐ {c['task']}")
