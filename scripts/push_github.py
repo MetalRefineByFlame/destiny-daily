@@ -97,6 +97,18 @@ def push_one(rel: str, msg: str) -> bool:
     return True
 
 
+def delete_one(rel: str, msg: str) -> bool:
+    """删除远端文件（本地已删掉的模块，云端也要跟着删，否则仓库里留着死代码）。"""
+    sha = get_sha(rel)
+    if not sha:
+        print(f"[skip] {rel:<42} 远端本来就没有")
+        return True
+    _req("DELETE", f"/repos/{OWNER}/{REPO}/contents/{urllib.parse.quote(rel)}",
+         {"message": msg, "sha": sha, "branch": BRANCH})
+    print(f"[删除] {rel:<42} 已从 {BRANCH} 移除")
+    return True
+
+
 def changed_files() -> list[str]:
     out = subprocess.run(
         ["git", "status", "--porcelain"],
@@ -119,6 +131,19 @@ def main() -> int:
     if not args:
         print(__doc__)
         return 1
+    # --delete a.py b.py：同步删除远端文件（本地删掉的模块要一起清掉）
+    if args[0] == "--delete":
+        files = args[1:]
+        if not files:
+            print("[error] --delete 后面要跟文件路径")
+            return 1
+        msg = os.environ.get("COMMIT_MSG") or f"删除 {len(files)} 个文件"
+        print(f"[info] 目标 {OWNER}/{REPO}@{BRANCH}")
+        print(f"[info] 提交信息：{msg}\n")
+        ok = sum(1 for f in files if delete_one(f.replace("\\", "/"), msg))
+        print(f"\n完成：删除 {ok}/{len(files)} 个")
+        return 0 if ok == len(files) else 1
+
     if args[0] == "--all-changed":
         files = changed_files()
         if not files:
