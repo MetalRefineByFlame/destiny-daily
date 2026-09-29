@@ -170,9 +170,16 @@ jobs:
           set -e
           TXT=$(ls -1t output/destiny-*.txt | head -1)
           HTML="${TXT%.txt}.html"
+          MAIL="${TXT%.txt}.mail.html"
           test -s "$TXT" || { echo "::error::文本报告为空"; exit 1; }
+          # 邮件排版版缺失时退回浏览器版，不因为这一个文件中断整轮推送
+          if [ ! -s "$MAIL" ]; then
+            echo "::warning::邮件排版版缺失，退回浏览器版作为正文"
+            MAIL="$HTML"
+          fi
           echo "txt=$TXT"   >> "$GITHUB_OUTPUT"
           echo "html=$HTML" >> "$GITHUB_OUTPUT"
+          echo "mail=$MAIL" >> "$GITHUB_OUTPUT"
           echo "day=$(basename "$TXT" .txt | sed 's/destiny-//')" >> "$GITHUB_OUTPUT"
           echo "报告文件：$TXT"
 
@@ -186,7 +193,11 @@ jobs:
           MAIL_TO: ${{ secrets.MAIL_TO }}
           MAIL_FROM_NAME: 五术日课
         run: |
-          python notify_mail.py "${{ steps.locate.outputs.txt }}" "${{ steps.locate.outputs.html }}"
+          # 参数顺序：文本摘要  邮件正文(排版版)  附件(完整版)
+          python notify_mail.py \
+            "${{ steps.locate.outputs.txt }}" \
+            "${{ steps.locate.outputs.mail }}" \
+            "${{ steps.locate.outputs.html }}"
 
       - name: 准备幂等标记文件
         run: |
