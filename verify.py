@@ -301,6 +301,37 @@ _CORE = ["【五门评分】", "【日常生活】", "【健康】", "【出行�
          "【投资】", "【学习】", "【今日打卡】"]
 check("文本版小节完整", [c for c in _CORE if c not in _txt], [])
 
+# --- MIME 结构：正文必须解码一次即还原（2026-09-29 双重编码事故的防回归） ---
+# 事故：手动 encode_quopri 叠加 MIMEText 自带 base64，header 声称 QP、
+# payload 实际是 base64，QQ 邮箱解出一屏「PCFET0NUWVBF…」乱码。
+import tempfile as _tmpf  # noqa: E402
+from notify_mail import build_message as _bm  # noqa: E402
+
+_dtmp = _tmpf.mkdtemp()
+_hpth = os.path.join(_dtmp, "t.html")
+with open(_hpth, "w", encoding="utf-8") as f:
+    f.write("<!DOCTYPE html><html><body><b>中文测试</b></body></html>")
+_mm = _bm("s", "t", _hpth, "a@x.com", ["b@y.com"])
+
+_inline = None
+for _p in _mm.walk():
+    cd = _p.get("Content-Disposition") or ""
+    if _p.get_content_type() == "text/html" and "attachment" not in cd:
+        _inline = _p
+        break
+check("邮件正文HTML part存在", _inline is not None, True)
+if _inline is not None:
+    check("正文CTE声明合法",
+          _inline.get("Content-Transfer-Encoding") in
+          ("base64", "quoted-printable", "7bit", "8bit"), True)
+    _dec = _inline.get_payload(decode=True).decode("utf-8", "replace")
+    check("正文解码一次即还原",
+          _dec.startswith("<!DOCTYPE html>") and "中文测试" in _dec, True)
+    check("正文无双重编码残留",
+          ("PCFET0" in _dec) or ("PGh0bWw" in _dec), False)
+    check("纯文本降级仍在", any(
+        p.get_content_type() == "text/plain" for p in _mm.walk()), True)
+
 print()
 print("=" * 78)
 print(f"结果：通过 {PASS} 项，失败 {FAIL} 项")
