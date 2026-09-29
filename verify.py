@@ -249,12 +249,20 @@ print("-" * 78)
 print("8) 邮件排版版（mail_report）")
 print("-" * 78)
 
-from engine.report import render_text as _rtxt  # noqa: E402
+import html as _html  # noqa: E402
+
+from engine.report import render_text as _rtxt, render_html as _rhtm  # noqa: E402
 from engine.mail_report import render_mail_html as _rmail  # noqa: E402
 from engine.synthesize import generate as _gen  # noqa: E402
 
-_rp = _gen(datetime(2026, 9, 29, 8, 0))   # 固定日期，保证这份快照可复现
+# 固定日期保证快照可复现
+_rp = _gen(datetime(2026, 9, 29, 8, 0))
 _mail_html = _rmail(_rp)
+_rhtml = _rhtm(_rp)
+
+
+def _e(s) -> str:
+    return _html.escape(str(s) if s is not None else "")
 
 _BANNED = ["display:flex", "display: flex", "display:grid", "display: grid",
            "var(--", "::before", "::after", "linear-gradient",
@@ -331,6 +339,89 @@ if _inline is not None:
           ("PCFET0" in _dec) or ("PGh0bWw" in _dec), False)
     check("纯文本降级仍在", any(
         p.get_content_type() == "text/plain" for p in _mm.walk()), True)
+
+# ---------------------------------------------------------------- 9) 每日一句经典
+# 全程离线：句子内建，不联网不受外部源影响，断言可以写死
+print()
+print("-" * 78)
+print("9) 每日一句经典（classic）")
+print("-" * 78)
+
+from engine import classic as _cl  # noqa: E402
+from datetime import timedelta as _td  # noqa: E402
+
+check("经典主题为12类", len(_cl.CLASSICS), 12)
+check("句库总量充足", sum(len(v) for v in _cl.CLASSICS.values()) >= 100, True)
+check("每主题不少于8句",
+      [t for t, v in _cl.CLASSICS.items() if len(v) < 8], [])
+check("每条字段齐全（书名/篇第/原文/白话）",
+      [t for t, v in _cl.CLASSICS.items()
+       for b, ch, tx, zh in v if not (b and ch and tx and zh)], [])
+check("每主题都有今日提点",
+      [t for t in _cl.CLASSICS if t not in _cl.ACTIONS], [])
+
+# 死角检查：曾有「养生」不在任何五行映射里，永远选不到
+_reach = set()
+for _wx in "木火土金水":
+    for _tt in (30.0, 60.0, 90.0):
+        for _hs in (None, 40.0):
+            _reach |= set(_cl._themes_for(_wx, _tt, _hs))
+check("12 类主题全部可达", sorted(_reach), sorted(_cl.CLASSICS))
+
+# 确定性：同一天两次调用必须完全相同
+_ctx = {"target": datetime(2026, 9, 29, 8, 0), "lr_day": {"gz": "辛卯"},
+        "total": 62.0}
+_c1 = _cl.daily_classic(dict(_ctx))
+_c2 = _cl.daily_classic(dict(_ctx))
+check("同一天结果确定", (_c1["text"], _c1["theme"]), (_c2["text"], _c2["theme"]))
+check("取到的句子在库里", _c1["text"] in
+      [t[2] for t in _cl.CLASSICS[_c1["theme"]]], True)
+check("日干五行已解析", _c1["wuxing"], "金")
+check("日干支已带上", _c1["day_gz"], "辛卯")
+
+# 轮转：连续 30 天不撞句（同一句连续两天出现最容易被察觉）
+_seq = []
+for _i in range(30):
+    _d = datetime(2026, 9, 29, 8, 0) + _td(days=_i)
+    _cc = _cl.daily_classic({"target": _d, "lr_day": {"gz": "辛卯"},
+                             "total": 62.0})
+    _seq.append(_cc["text"])
+check("相邻两天不撞句",
+      [i for i in range(1, 30) if _seq[i] == _seq[i - 1]], [])
+check("30天内句子充分轮转", len(set(_seq)) >= 25, True)
+
+# 健康分偏低时养生能被选中（这一路只有它进得去）
+_low = None
+for _i in range(20):
+    _d = datetime(2026, 9, 29, 8, 0) + _td(days=_i)
+    _cc = _cl.daily_classic({"target": _d, "lr_day": {"gz": "甲子"},
+                             "total": 62.0}, health_score=38.0)
+    if _cc["theme"] == "养生":
+        _low = _cc
+        break
+check("健康分低时切入养生", _low is not None, True)
+
+# 档位影响：运势极低偏守、极高偏进
+_th_lo = _cl._themes_for("木", 30.0)[0]
+_th_hi = _cl._themes_for("木", 90.0)[0]
+check("低分档偏守静", _th_lo, "守静")
+check("高分档偏进取", _th_hi, "进取")
+
+# 三版渲染都带经典栏
+_ctxt = _cl.render_classic_text(_c1)
+check("文本版带经典段", "【每日一句经典" in _ctxt, True)
+check("文本版带出处", "—— 道德经" in _ctxt or "——" in _ctxt, True)
+check("文本版带今日提点", "【今日提点】" in _ctxt, True)
+# 渲染断言必须对照真实报告里那一句，不能拿上面另造的 ctx 去比
+_rc = _rp["classic"]
+_rc_q = _e(_rc["text"])[:12]
+check("报告已带 classic 字段", bool(_rc.get("text")), True)
+check("浏览器版带经典栏", "每日一句经典" in _rhtml, True)
+check("浏览器版带原文", _rc_q in _rhtml, True)
+check("邮件版带经典栏", "每日一句经典" in _mail_html, True)
+check("邮件版带原文", _rc_q in _mail_html, True)
+check("邮件版无链接残留(资讯已移除)",
+      "utm_" in _mail_html or "抓取于" in _mail_html, False)
 
 print()
 print("=" * 78)
