@@ -145,6 +145,62 @@ ul.tips li::before{content:"";position:absolute;left:5px;top:14px;width:6px;heig
   border-radius:10px;padding:11px 14px;font-size:13.2px;color:#7c3b32;margin:12px 0}
 .risk b{color:var(--zhu)}
 
+/* ---------- 每日一卦 ---------- */
+.gua-top{display:flex;align-items:center;gap:16px;padding:14px 16px;
+  background:linear-gradient(155deg,#fffdf7,#f6f0e3);border:1px solid var(--line);
+  border-radius:13px;margin-bottom:14px}
+.gua-sym{font-size:52px;line-height:1;flex:0 0 auto;color:#5a4a2a}
+.gua-top .gm{font-size:21px;font-weight:700;letter-spacing:.04em}
+.gua-top .gx{font-size:12.5px;color:var(--ink2);margin-top:3px}
+.gua-top .gtags{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px}
+.gua-top .gtags span{font-size:11.5px;border:1px solid var(--line);border-radius:999px;
+  padding:1px 9px;background:#fff;color:var(--ink2)}
+.tend{margin-left:auto;flex:0 0 auto;text-align:center;padding:6px 14px;border-radius:10px;
+  background:#fff;border:1px solid var(--line)}
+.tend .tt{font-size:19px;font-weight:700;line-height:1.2}
+.tend .tl{font-size:11px;color:var(--ink2);margin-top:2px}
+
+.yaotu{display:grid;gap:7px;margin:12px 0}
+.yl{display:grid;grid-template-columns:64px 1fr;align-items:center;gap:12px}
+.yl .bar{display:grid;grid-template-columns:1fr 1fr;gap:7px;height:11px}
+.yl .bar i{border-radius:2px;background:#3b3630;display:block}
+.yl .bar.yin i{background:#fff;border:1.5px solid #b7ad98}
+.yl .bar.dong i{background:var(--zhu);box-shadow:0 0 0 2px rgba(176,48,48,.18)}
+.yl .bar.yin.dong i{background:#fff;border-color:var(--zhu);
+  box-shadow:0 0 0 2px rgba(176,48,48,.18)}
+.yl .info{font-size:12.6px;color:#5d574e;line-height:1.6}
+.yl .info b{color:var(--ink)}
+.yl .info .dn{color:var(--zhu);font-weight:700}
+.yl .info .txt{color:#7c7367}
+.judge{background:#fdfbf6;border:1px solid var(--line);border-left:4px solid var(--gold);
+  border-radius:10px;padding:12px 15px;margin:12px 0}
+.judge .jh{font-size:12.5px;color:var(--gold);font-weight:700;letter-spacing:.06em}
+.judge .jm{font-size:12.6px;color:var(--ink2);margin:2px 0 7px}
+.judge .jt{font-size:15px;font-weight:600;color:#332e28;line-height:1.75}
+.jd-what{font-size:12.4px;color:#8c8478;margin-top:7px;line-height:1.65}
+
+.jing{border:1px solid var(--line);border-radius:11px;padding:13px 15px;background:#fffdf8;
+  margin-top:11px}
+.jing h5{margin:0 0 7px;font-size:12.5px;letter-spacing:.1em;color:var(--qing);font-weight:700}
+.jing .orig{font-size:14.6px;color:#332e28;line-height:1.85}
+.jing .bai{font-size:13.2px;color:#7c7367;line-height:1.75;margin-top:5px}
+.jing.bai-bg .orig{font-size:15px;letter-spacing:.02em}
+
+.gua-rel{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;margin-top:11px}
+.gcard{border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:#fffdf8}
+.gcard .lb{font-size:11.5px;color:var(--ink2);letter-spacing:.06em}
+.gcard .nm{font-size:14.5px;font-weight:700}
+.gcard .nm .sym{font-size:17px;color:#5a4a2a;margin-right:5px}
+.gcard .note{font-size:11.8px;color:#8c8478;margin-top:2px;line-height:1.55}
+
+.studybox{margin-top:12px;border:1px dashed var(--line);border-radius:11px;
+  padding:12px 15px;background:#fdfbf6}
+.studybox h5{margin:0 0 8px;font-size:12.5px;letter-spacing:.1em;color:var(--gold);font-weight:700}
+.studybox .line{font-size:13.4px;line-height:1.8;color:#4a443c}
+.studybox .line .pos{display:inline-block;min-width:34px;color:var(--zhu);font-weight:700}
+.studybox .quote{font-size:13.2px;color:#332e28;margin-top:9px;padding:9px 12px;
+  background:#fff;border:1px solid var(--line);border-radius:8px;line-height:1.8}
+
 .disclaim{margin-top:22px;padding:14px 16px;border:1px dashed var(--line);border-radius:12px;
   font-size:12.4px;line-height:1.7;color:#8c8478;background:#fdfbf6}
 .foot{margin-top:14px;text-align:center;font-size:12px;color:#a09889}
@@ -186,6 +242,117 @@ def _sec(icon: str, title: str, body: str, score=None) -> str:
     sc = f'<span class="sc">{score:.0f}</span>' if score is not None else ""
     return (f'<div class="section"><div class="sec-h"><span class="ico">{icon}</span>'
             f'<h2>{_e(title)}</h2>{sc}</div>{body}</div>')
+
+
+# ---------------------------------------------------------------- 每日一卦
+
+YAO_NAME = {6: "老阴", 7: "少阳", 8: "少阴", 9: "老阳"}
+TEND_COLOR = {"顺": "#2f6b4f", "平": "#3d6b5a", "警": "#b03030"}
+
+
+def _gua_section(z: Dict) -> str:
+    """每日一卦栏目 —— 与本命提要并列，不并入五门评分"""
+    if not z:
+        return ""
+
+    # --- 头部 ---
+    tags = "".join(f"<span>{_e(t)}</span>" for t in z.get("tags", []))
+    tc = TEND_COLOR.get(z.get("tendency"), "#3d6b5a")
+    head = (
+        f'<div class="gua-top">'
+        f'<div class="gua-sym">{z["symbol"]}</div>'
+        f'<div><div class="gm">{_e(z["name"])}</div>'
+        f'<div class="gx">第{z["xu"]}卦　上{z["upper"]}　下{z["lower"]}</div>'
+        f'<div class="gtags">{tags}</div></div>'
+        f'<div class="tend"><div class="tt" style="color:{tc}">{_e(z["tendency"])}</div>'
+        f'<div class="tl">{_e(z["tend_note"])}</div></div></div>')
+
+    # --- 六爻爻图（自上而下：上爻在顶）---
+    yaotu = ['<div class="yaotu">']
+    for y in reversed(z["yao_study"]):
+        yang = z["yin_yang"][y["pos"] - 1] == 1
+        cls = "bar" + (" yin" if not yang else "")
+        if y["dong"]:
+            cls += " dong"
+        bar = (f'<span class="{cls}">'
+               + ("<i></i><i></i>" if yang else "<i></i><i></i>")
+               + "</span>")
+        dong = ('　<span class="dn">动爻</span>' if y["dong"] else "")
+        yaotu.append(
+            f'<div class="yl">{bar}'
+            f'<div class="info"><b>{y["pos"]}爻</b>　{_e(y["name"])}'
+            f'　{y["dewei"]}{dong}'
+            f'<br><span class="txt">{_e(y["text"])}</span></div></div>')
+    yaotu.append("</div>")
+    yaotu = "".join(yaotu)
+
+    # --- 主断 ---
+    judge = (
+        f'<div class="judge"><div class="jh">占　断</div>'
+        f'<div class="jm">{_e(z["method"])}　·　主断取「{_e(z["judge_src"])}」</div>'
+        f'<div class="jt">{_e(z["judge_text"])}</div>'
+        f'<div class="jd-what">倾向依断辞用语推定，示人以势，非定命之辞。</div></div>')
+
+    # --- 具体分析 + 本命呼应 ---
+    ana = _tips(list(z.get("analysis", [])) + list(z.get("benming", [])))
+
+    # --- 经文 ---
+    jing = (
+        f'<div class="jing"><h5>卦　辞</h5>'
+        f'<div class="orig">{_e(z["ci"])}</div>'
+        f'<div class="bai">{_e(z["ci_bai"])}</div></div>'
+        f'<div class="jing bai-bg"><h5>大象传（象曰）</h5>'
+        f'<div class="orig">{_e(z["xiang"])}</div>'
+        f'<div class="bai">{_e(z["xg_bai"])}</div></div>'
+        f'<div class="jing"><h5>核心义理</h5>'
+        f'<div class="orig" style="font-size:14px;line-height:1.9">{_e(z["yi"])}</div></div>'
+        f'<div class="jing"><h5>今日之用</h5>'
+        f'<div class="orig" style="font-size:14px;line-height:1.9">{_e(z["yong"])}</div></div>')
+
+    # --- 关系卦 ---
+    rels = ['<div class="gua-rel">']
+    b = z.get("bian")
+    if b:
+        rels.append(f'<div class="gcard"><div class="lb">之卦（变卦）</div>'
+                    f'<div class="nm"><span class="sym">{b["symbol"]}</span>{_e(b["name"])}</div>'
+                    f'<div class="note">事态走向。{_e(b["ci"])}</div></div>')
+    h = z.get("hu")
+    if h:
+        rels.append(f'<div class="gcard"><div class="lb">互卦</div>'
+                    f'<div class="nm"><span class="sym">{h["symbol"]}</span>{_e(h["name"])}</div>'
+                    f'<div class="note">二三五四爻相叠，看事情内在的过程肌理。</div></div>')
+    for key, lb, note in (("cuo", "错卦（旁通）", "阴阳尽反 —— 换个立场看同一件事。"),
+                          ("zong", "综卦（覆卦）", "上下颠倒 —— 反过来看同一件事。")):
+        g = z.get(key)
+        if g:
+            rels.append(f'<div class="gcard"><div class="lb">{lb}</div>'
+                        f'<div class="nm"><span class="sym">{g["symbol"]}</span>{_e(g["name"])}</div>'
+                        f'<div class="note">{_e(note)}</div></div>')
+    rels.append("</div>")
+    rels = "".join(rels)
+
+    # --- 学习：爻位通则 ---
+    lines = []
+    for y in z["yao_study"]:
+        mark = '　<span style="color:var(--zhu);font-weight:700">（今日动爻）</span>' if y["dong"] else ""
+        lines.append(
+            f'<div class="line"><span class="pos">{y["pos"]}爻</span>{_e(y["wei"])}{mark}</div>')
+    study = (f'<div class="studybox"><h5>爻　位　通　则</h5>' + "".join(lines) + "</div>")
+
+    return head + yaotu + judge + _jing_notice(z) + rels + ana + jing + study
+
+
+def _jing_notice(z: Dict) -> str:
+    """起卦法说明"""
+    mv = z.get("moving", [])
+    cnt = len(mv)
+    if cnt == 0:
+        note = "六爻皆静，卦象稳定，以本卦卦辞为主体，不动处以守常。"
+    else:
+        pos = "、".join(f"{p}爻" for p in mv)
+        note = f"第 {pos} 动，阳极阴生、阴极阳生，是为变机所在；本卦言其体，之卦言其用。"
+    return (f'<div class="jd-what" style="margin:10px 0 0">'
+            f'起卦：大衍之数五十，其用四十有九，三变成爻，十八变成卦。{_e(note)}</div>')
 
 
 # ---------------------------------------------------------------- 主渲染
@@ -239,6 +406,8 @@ def render_html(r: Dict) -> str:
         f'</div></div></div>')
 
     body.append(_sec("盘", "本命提要", dest))
+    if r.get("zhouyi"):
+        body.append(_sec("卦", "每日一卦 · 大衍筮法", _gua_section(r["zhouyi"])))
     body.append(_sec("五", "五门评分", _bars(r["five"])))
     body.append(_sec("常", "日常生活",
                      f'<div style="font-size:15px;font-weight:600;margin-bottom:10px;'
@@ -356,6 +525,29 @@ def render_text(r: Dict) -> str:
     L.append(f"{m['date_str']} {m['weekday']}　{m['lunar_full']}　{m['day_gz']}日")
     L.append(f"综合运势 {m['total']:.0f} 分（{m['grade']}）　节气：{m['jieqi']}")
     L.append("")
+    if r.get("zhouyi"):
+        z = r["zhouyi"]
+        L.append(f"【每日一卦】{z['symbol']} {z['name']}（第{z['xu']}卦）　"
+                 f"上{z['upper']}　下{z['lower']}　倾向：{z['tendency']}")
+        for i in range(5, -1, -1):
+            y = z["yao_study"][i]
+            yang = z["yin_yang"][i] == 1
+            sym = "━━━" if yang else "━　━"
+            L.append(f"    {sym}  {y['pos']}爻 {y['name']}"
+                     f"{' ←动' if y['dong'] else ''}　{y['text']}")
+        L.append(f"  卦辞：{z['ci']}")
+        L.append(f"  大象：{z['xiang']}")
+        if z.get("bian"):
+            L.append(f"  之卦：{z['bian']['symbol']} {z['bian']['name']}　{z['bian']['ci']}")
+        L.append(f"  断法：{z['method']}")
+        L.append(f"  主断：{z['judge_src']}　{z['judge_text']}")
+        for x in z["analysis"]:
+            L.append(f"  · {x}")
+        for x in z["benming"]:
+            L.append(f"  ◈ {x}")
+        L.append(f"  义理：{z['yi']}")
+        L.append(f"  日用：{z['yong']}")
+        L.append("")
     L.append("【五门评分】")
     for p in r["five"]:
         L.append(f"  {p['name']:<6} {p['score']:.0f}　{p['summary']}")
