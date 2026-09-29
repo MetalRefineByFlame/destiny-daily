@@ -80,18 +80,14 @@ def build_message(subject: str, body: str, html: str | None = None,
             print(f"[warn] HTML 报告读取失败，仅发送文本：{e}")
 
     if raw and inline_html:
-        # 显式指定 quoted-printable：比 base64 体积小，
-        # 且部分国产邮件网关对超长单行 base64 有截断问题
-        part = MIMEText(raw, "html", "utf-8")
-        part.set_charset("utf-8")
-        del part["Content-Transfer-Encoding"]
-        try:
-            from email.encoders import encode_quopri
-            encode_quopri(part)
-            part["Content-Transfer-Encoding"] = "quoted-printable"
-        except Exception:        # noqa: BLE001
-            pass
-        alt.attach(part)
+        # ⚠ 不要在这里手动 encode_quopri！
+        # MIMEText(…, "utf-8") 的 charset 自带 base64 body-encoding，
+        # 再叠一层手动 QP 会双重编码：header 声称 quoted-printable、
+        # payload 实际是 base64，客户端解出来就是一屏 PCFET0NUWVBF… 乱码。
+        # （2026-09-29 事故：两封推送全部变成 base64 乱码，根因即此。）
+        # MIMEText 默认的 base64 是正确的——Generator 会按 76 字符/行自动折行，
+        # 「国产网关截断超长 base64 单行」的担心并不成立，因为根本不存在超长单行。
+        alt.attach(MIMEText(raw, "html", "utf-8"))
 
     msg.attach(alt)
 
