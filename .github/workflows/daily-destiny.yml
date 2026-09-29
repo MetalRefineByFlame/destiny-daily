@@ -1,0 +1,134 @@
+# 每日运势早报 · 云端生成与推送
+#
+# 触发方式（三选一，可并存）：
+#   1. repository_dispatch  —— 由外部可靠调度器（Cloudflare Cron）调用。推荐，不受 GitHub 调度器故障影响
+#   2. workflow_dispatch     —— 手动在 Actions 页面点「Run workflow」，或 gh workflow run 触发
+#   3. schedule              —— GitHub 原生 cron，UTC 00:07 = 北京时间 08:07
+#                               ⚠ 已知不可靠：社区报告自 2026-08 起存在延迟数小时甚至不触发的情况，
+#                                 故仅作兜底，实际以方式 1 为主
+#
+# 需要配置的 Secrets（Settings → Secrets and variables → Actions）：
+#   个人档案（仓库是公开的，出生数据一律不入库，由 Secrets 注入）：
+#     DESTINY_NAME        例：江公子
+#     DESTINY_GENDER      male 或 female
+#     DESTINY_BIRTH       例：1980-07-17 09:28（公历，24 小时制）
+#     DESTINY_LONGITUDE   例：119.30（出生地东经度数）
+#     DESTINY_CITY        例：福州（仅用于展示，可省）
+#   发信：
+#     SMTP_HOST           例：smtp.qq.com
+#     SMTP_PORT           例：465
+#     SMTP_USER           例：your_account@qq.com
+#     SMTP_PASS           QQ 邮箱须填「SMTP 授权码」，不是登录密码
+#     MAIL_TO             例：your_account@qq.com
+#
+# 注意：schedule 用 UTC。北京时间 08:00 等于 UTC 00:00。
+
+name: 每日运势早报
+
+on:
+  repository_dispatch:
+    types: [daily-destiny]
+  workflow_dispatch:
+  schedule:
+    - cron: '7 0 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  daily-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 准备 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 检查依赖（本项目只用标准库）
+        run: |
+          python -V
+          python -c "import math, json, smtplib, urllib.request; print('stdlib ok')"
+
+      - name: 校验必要 Secrets
+        env:
+          DESTINY_BIRTH: ${{ secrets.DESTINY_BIRTH }}
+          DESTINY_LONGITUDE: ${{ secrets.DESTINY_LONGITUDE }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+        run: |
+          set -u
+          missing=0
+          for v in DESTINY_BIRTH DESTINY_LONGITUDE MAIL_TO SMTP_USER SMTP_PASS; do
+            if [ -z "${!v}" ]; then
+              echo "::error::缺少 Secret: $v"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "请到 Settings → Secrets and variables → Actions 补齐后再运行"
+            exit 1
+          fi
+          echo "Secrets 齐全"
+
+      - name: 生成个人档案（profile.json 不入库，由 Secrets 现场生成）
+        env:
+          DESTINY_NAME: ${{ secrets.DESTINY_NAME }}
+          DESTINY_GENDER: ${{ secrets.DESTINY_GENDER }}
+          DESTINY_BIRTH: ${{ secrets.DESTINY_BIRTH }}
+          DESTINY_LONGITUDE: ${{ secrets.DESTINY_LONGITUDE }}
+          DESTINY_CITY: ${{ secrets.DESTINY_CITY }}
+          DESTINY_EMAIL: ${{ secrets.MAIL_TO }}
+        run: python scripts/make_profile.py --force
+
+      - name: 生成当日报告
+        env:
+          TZ: Asia/Shanghai
+          DESTINY_TZ_OFFSET: '8'
+        run: |
+          mkdir -p output
+          python daily_run.py --stdout-text
+
+      - name: 定位产物
+        id: locate
+        run: |
+          set -e
+          TXT=$(ls -1t output/destiny-*.txt | head -1)
+          HTML="${TXT%.txt}.html"
+          test -s "$TXT" || { echo "::error::文本报告为空"; exit 1; }
+          echo "txt=$TXT"   >> "$GITHUB_OUTPUT"
+          echo "html=$HTML" >> "$GITHUB_OUTPUT"
+          echo "day=$(basename "$TXT" .txt | sed 's/destiny-//')" >> "$GITHUB_OUTPUT"
+          echo "报告文件：$TXT"
+
+      - name: 推送邮件
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_SSL: '1'
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          MAIL_FROM_NAME: 五术日课
+        run: |
+          python notify_mail.py "${{ steps.locate.outputs.txt }}" "${{ steps.locate.outputs.html }}"
+
+      - name: 失败告警
+        if: ${{ failure() }}
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_SSL: '1'
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: |
+          DAY=$(date -u -d '+8 hours' +%Y-%m-%d)
+          python notify_mail.py \
+            --subject "[失败] 每日运势未生成 ${DAY}" \
+            --body "今日运势报告在云端生成失败，请到 Actions 运行日志查看原因。常见原因：Secrets 缺失或失效、SMTP 授权码失效、Python 依赖缺失。（BTC 行情源超时已有降级设计，不应导致整轮失败。）"
