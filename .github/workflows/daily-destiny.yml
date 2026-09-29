@@ -1,11 +1,21 @@
 # 每日运势早报 · 云端生成与推送
 #
-# 触发方式（三选一，可并存）：
-#   1. repository_dispatch  —— 由外部可靠调度器（Cloudflare Cron）调用。推荐，不受 GitHub 调度器故障影响
-#   2. workflow_dispatch     —— 手动在 Actions 页面点「Run workflow」，或 gh workflow run 触发
-#   3. schedule              —— GitHub 原生 cron，UTC 00:07 = 北京时间 08:07
-#                               ⚠ 已知不可靠：社区报告自 2026-08 起存在延迟数小时甚至不触发的情况，
-#                                 故仅作兜底，实际以方式 1 为主
+# 触发方式（三选一，可并存，靠「当日幂等」保证一天只发一封）：
+#   1. repository_dispatch  —— Cloudflare Worker 的 cron 每天 UTC 00:00 调用，准点、主力通道
+#   2. workflow_dispatch     —— 手动在 Actions 页面点「Run workflow」，随时补发
+#   3. schedule              —— GitHub 原生 cron，自愈兜底
+#
+# ⚠ 为什么需要第 3 条：GitHub 自家的 schedule 曾在 2026-08 出现平台级故障——
+#   延迟数小时甚至整天不触发，而 workflow_dispatch 正常。因此这里采用
+#   「多窗口轮询 + 当日幂等」的自愈设计：
+#     · 在北京时间 08 / 09 / 10 / 11 / 12 / 13 点各试一次（UTC 0,1,2,3,4,5 的 17 分）
+#     · 早于 08:00 直接跳过；到点后先查「今天是否已成功发过」
+#     · 查命中就跳过，没命中才发，发完打个标记
+#   结果：不管 Cloudflare 还是 GitHub 谁先成功，当天只出一封；
+#         即使 GitHub 把某几次（甚至某几个小时）错过，只要当天有一次跑起来就会补发。
+#
+# 幂等标记的实现：用 GitHub Actions Cache，key = destiny-sent-YYYY-MM-DD（北京时间）。
+#   免费、无需外部存储，且 7 天自动过期，不会堆积。
 #
 # 需要配置的 Secrets（Settings → Secrets and variables → Actions）：
 #   个人档案（仓库是公开的，出生数据一律不入库，由 Secrets 注入）：
@@ -20,8 +30,6 @@
 #     SMTP_USER           例：your_account@qq.com
 #     SMTP_PASS           QQ 邮箱须填「SMTP 授权码」，不是登录密码
 #     MAIL_TO             例：your_account@qq.com
-#
-# 注意：schedule 用 UTC。北京时间 08:00 等于 UTC 00:00。
 
 name: 每日运势早报
 
@@ -30,13 +38,64 @@ on:
     types: [daily-destiny]
   workflow_dispatch:
   schedule:
-    - cron: '7 0 * * *'
+    # UTC 时间，北京时间为这些值 +8；错开到 17 分，避开整点排队高峰
+    - cron: '17 0,1,2,3,4,5 * * *'
 
 permissions:
   contents: read
 
 jobs:
+  # 第一步：决定这一步要不要真的发。Cloudflare / 手动触发一律放行，
+  # GitHub 自家 cron 需要过「已到 08:00」+「当天还没发过」两道闸。
+  should-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.final.outputs.run }}
+      day: ${{ steps.gate.outputs.day }}
+    steps:
+      - name: 时间闸门
+        id: gate
+        run: |
+          set -e
+          DAY=$(TZ=Asia/Shanghai date +%F)
+          HOUR=$(TZ=Asia/Shanghai date +%H)
+          echo "day=$DAY" >> "$GITHUB_OUTPUT"
+          echo "北京时间 $DAY $(TZ=Asia/Shanghai date +%H:%M)，触发来源 ${{ github.event_name }}"
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$HOUR" -lt 8 ]; then
+            echo "run=no" >> "$GITHUB_OUTPUT"
+            echo "结论：定时任务早于 08:00，跳过"
+          else
+            echo "run=maybe" >> "$GITHUB_OUTPUT"
+            echo "结论：时间窗口通过，继续检查幂等标记"
+          fi
+
+      - name: 查当日幂等标记
+        id: dedup
+        if: steps.gate.outputs.run == 'maybe'
+        uses: actions/cache@v4
+        with:
+          path: .destiny-state
+          key: destiny-sent-${{ steps.gate.outputs.day }}
+          lookup-only: true
+
+      - name: 最终裁决
+        id: final
+        run: |
+          case "${{ steps.gate.outputs.run }}" in
+            no) echo "run=no" >> "$GITHUB_OUTPUT"; exit 0 ;;
+          esac
+          if [ "${{ steps.dedup.outputs.cache-hit }}" = "true" ]; then
+            echo "run=no" >> "$GITHUB_OUTPUT"
+            echo "今天 ${{ steps.gate.outputs.day }} 已经成功发过，跳过本次"
+          else
+            echo "run=yes" >> "$GITHUB_OUTPUT"
+            echo "今天还没发，执行发送"
+          fi
+
   daily-report:
+    needs: should-run
+    if: needs.should-run.outputs.run == 'yes'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -117,6 +176,20 @@ jobs:
           MAIL_FROM_NAME: 五术日课
         run: |
           python notify_mail.py "${{ steps.locate.outputs.txt }}" "${{ steps.locate.outputs.html }}"
+
+      - name: 准备幂等标记文件
+        run: |
+          mkdir -p .destiny-state
+          echo "${{ needs.should-run.outputs.day }}" > .destiny-state/day.txt
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > .destiny-state/sent-at.txt
+          echo "run ${{ github.run_id }} / ${{ github.event_name }}" > .destiny-state/run.txt
+
+      - name: 记录当日已发送（幂等标记）
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: .destiny-state
+          key: destiny-sent-${{ needs.should-run.outputs.day }}
 
       - name: 失败告警
         if: ${{ failure() }}
