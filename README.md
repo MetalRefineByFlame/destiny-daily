@@ -175,9 +175,27 @@ python daily_run.py 2026-10-01 --days 7
 python daily_run.py --text
 ```
 
-产出在 `output/`：
-- `destiny-YYYY-MM-DD.html` —— 完整报告（宣纸风、手机可读、可打印）
-- `destiny-YYYY-MM-DD.txt` —— 纯文本摘要（邮件正文）
+产出在 `output/`，一次三份：
+
+| 文件 | 用途 | 排版方式 |
+|---|---|---|
+| `destiny-YYYY-MM-DD.html` | 完整报告，浏览器看 / 打印 / 存档 | grid + flex，宣纸风，最好看 |
+| `destiny-YYYY-MM-DD.mail.html` | **邮件正文**，发到邮箱的就是它 | table 布局 + 全内联样式 |
+| `destiny-YYYY-MM-DD.txt` | 纯文本摘要，邮件降级正文 / 终端看 | 无排版 |
+
+> 为什么要两份 HTML：浏览器那份用了 grid / flex / CSS 变量 / 伪元素，
+> QQ 邮箱、163、Outlook（Word 排版引擎）会把它剥掉或渲染错乱，Gmail 也在投毒黑名单里。
+> 邮件只能退回「table + 全内联」的老写法，详见 `engine/mail_report.py` 顶部注释。
+
+邮件结构：
+
+```
+multipart/mixed
+  └─ multipart/alternative
+       ├─ text/plain      纯文本摘要（不支持 HTML 时显示这个）
+       └─ text/html       排版版正文 ← 主流客户端显示这个
+  └─ attachment: *.html   完整版附件，留档 / 转发用
+```
 
 > Windows 下用受管 Python：
 > `C:\Users\江\.workbuddy\binaries\python\versions\3.13.12\python.exe -B daily_run.py`
