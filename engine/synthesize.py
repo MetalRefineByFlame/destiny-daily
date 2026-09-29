@@ -31,7 +31,7 @@ from .base import (
     clamp, WX_SHENG, WX_SHENG_BY, WX_KE, WX_KE_BY, zhi_wuxing, gan_wuxing,
     solar_term_datetime, GAN_YANG,
 )
-from . import bazi, qimen, liuren, yijing, market, lottery, zhouyi
+from . import bazi, qimen, liuren, yijing, market, lottery, zhouyi, classic
 from .lunar import lunar_info
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -173,10 +173,13 @@ def generate(target: datetime, profile: Optional[Dict] = None,
     health = _health(ctx)
     study = _study(ctx)
     career = _career(ctx)
+    zhouyi_pan = _zhouyi(ctx)
     return {
         "meta": _meta(ctx),
         "destiny": _destiny_summary(ctx),
-        "zhouyi": _zhouyi(ctx),
+        "zhouyi": zhouyi_pan,
+        "classic": classic.daily_classic(ctx, zhouyi_pan,
+                                         health_score=health.get("score")),
         "five": _five_panels(ctx),
         "general": _general(ctx),
         "career": career,
