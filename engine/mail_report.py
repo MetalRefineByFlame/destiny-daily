@@ -594,6 +594,55 @@ def _checks(r: Dict) -> str:
     return (f'<table width="100%" cellpadding="0" cellspacing="0" border="0">{rows}</table>')
 
 
+# ---------------------------------------------------------------- 每日一句经典
+
+
+def _classic_sec(r: Dict) -> str:
+    """邮件版「每日一句经典」。
+
+    左侧朱砂色条用「3px 宽的独立 <td> 填色」实现，而不是 border-left：
+    Outlook 的 Word 引擎对 td 单边 border 支持不稳，容易整条消失。
+    """
+    c = r.get("classic")
+    if not c:
+        return _sec("典", "每日一句经典", _note("今日经典未取到，不影响术数内容。"))
+
+    head = (
+        f'<table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>'
+        f'<td valign="middle" style="{_f(11.5, GOLD, "700", 1.5)}padding:2px 10px;'
+        f'background:#f3ece0;border-radius:20px">{_e(c["theme"])}</td>'
+        f'<td align="right" valign="middle" style="{_f(10.8, INK3, "normal", 1.5)}">'
+        f'{_e(c.get("day_gz", ""))} 日　日干属{_e(c.get("wuxing", ""))}</td>'
+        f'</tr></table>')
+
+    quote = (
+        f'<table width="100%" cellpadding="0" cellspacing="0" border="0" '
+        f'bgcolor="{SOFT}" style="background:{SOFT};margin-top:9px"><tr>'
+        f'<td width="3" bgcolor="{ZHU}" style="background:{ZHU};'
+        f'font-size:1px;line-height:1px">&nbsp;</td>'
+        f'<td style="padding:13px 15px">'
+        f'<div style="{_f(16.2, INK, "600", 1.95)}">{_e(c["text"])}</div>'
+        f'<div style="{_f(12.2, INK3, "normal", 1.6)}margin-top:8px;text-align:right">'
+        f'—— {_e(c["book"])}·{_e(c["chapter"])}</div>'
+        f'</td></tr></table>')
+
+    zh = (f'<div style="{_f(13.2, INK2, "normal", 1.85)}margin-top:11px">'
+          f'<span style="font-weight:700;color:{INK}">白话　</span>{_e(c["zh"])}</div>')
+
+    note = (
+        f'<table width="100%" cellpadding="0" cellspacing="0" border="0" '
+        f'bgcolor="#f6f9f4" style="background:#f6f9f4;margin-top:10px"><tr>'
+        f'<td style="padding:10px 13px;font-size:13.2px;color:#4a5a42;'
+        f'line-height:1.8;font-family:{FONT}">'
+        f'<span style="font-weight:700">今日提点　</span>{_e(c["note"])}</td>'
+        f'</tr></table>')
+
+    why = (f'<div style="{_f(11.4, INK3, "normal", 1.7)}margin-top:9px">'
+           f'{_e(c["why"])}</div>')
+
+    return _sec("典", "每日一句经典", head + quote + zh + note + why)
+
+
 # ---------------------------------------------------------------- 主渲染
 
 
@@ -664,6 +713,8 @@ def render_mail_html(r: Dict) -> str:
 
     body.append(_sec("学", "传统文化学习",
                      _lead(st["headline"]) + _tips(st["plan"]), st["score"]))
+    if r.get("classic"):
+        body.append(_classic_sec(r))
     body.append(_sec("记", "今日打卡清单", _checks(r)))
 
     foot = ('<tr><td style="padding:0 18px">'
