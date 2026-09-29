@@ -55,8 +55,9 @@ def run_one(day: datetime, text_only: bool = False,
     paths = save_report(r, OUT_DIR, day)
     print(f"[OK] {day.strftime('%Y-%m-%d')} 运势 {r['meta']['total']:.0f} 分"
           f"（{r['meta']['grade']}）")
-    print(f"     HTML -> {paths['html']}")
-    print(f"     TXT  -> {paths['txt']}")
+    print(f"     HTML  -> {paths['html']}")
+    print(f"     邮件版 -> {paths['mail']}")
+    print(f"     TXT   -> {paths['txt']}")
     if print_text:
         print("\n-----8<-----")
         print(render_text(r))
