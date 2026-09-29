@@ -628,14 +628,29 @@ def render_text(r: Dict) -> str:
 
 def save_report(r: Dict, out_dir: str = OUT_DIR,
                 date: datetime = None) -> Dict[str, str]:
+    """产出三份：
+        .html       完整报告，宣纸风、带 grid/flex，浏览器里看最好
+        .mail.html  邮件专用版，table 布局 + 全内联样式（见 engine.mail_report）
+        .txt        纯文本摘要，用于邮件降级正文 / 控制台
+    """
     os.makedirs(out_dir, exist_ok=True)
     date = date or r["target"] if "target" in r else datetime.now()
     stamp = (date.strftime("%Y-%m-%d") if isinstance(date, datetime)
              else str(date))
     html_path = os.path.join(out_dir, f"destiny-{stamp}.html")
+    mail_path = os.path.join(out_dir, f"destiny-{stamp}.mail.html")
     txt_path = os.path.join(out_dir, f"destiny-{stamp}.txt")
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(render_html(r))
     with open(txt_path, "w", encoding="utf-8") as f:
         f.write(render_text(r))
-    return {"html": html_path, "txt": txt_path}
+    # 邮件版做延迟导入 + 兜底：mail_report 反向依赖本模块的色板，
+    # 顶层互相 import 会形成循环，这里在函数内部取用最省事。
+    # 即便某天它出问题，也不影响上面两份主产物。
+    try:
+        from .mail_report import render_mail_html as _render_mail
+        with open(mail_path, "w", encoding="utf-8") as f:
+            f.write(_render_mail(r))
+    except Exception as e:        # noqa: BLE001
+        print(f"[warn] 邮件版 HTML 生成失败，已跳过：{e}")
+    return {"html": html_path, "mail": mail_path, "txt": txt_path}
