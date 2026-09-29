@@ -11,6 +11,7 @@
 """
 import json
 import os
+import re
 import sys
 from datetime import datetime, timedelta
 
@@ -239,6 +240,66 @@ _d0 = datetime(2026, 1, 1)
 for _i in range(365):
     _seen.add(_zy.cast(_d0 + timedelta(days=_i), personal="甲").ben.name)
 check("一年内可见卦数(>=55)", len(_seen) >= 55, True)
+
+# ---------------------------------------------------------------- 8) 邮件排版版
+# 邮件客户端（QQ/163/Outlook/Gmail）会把 flex/grid/伪元素/外部资源剥掉或渲染错乱，
+# 这几项是「发出去还能不能看」的最后一道防线，改 mail_report.py 后务必重跑。
+print()
+print("-" * 78)
+print("8) 邮件排版版（mail_report）")
+print("-" * 78)
+
+from engine.report import render_text as _rtxt  # noqa: E402
+from engine.mail_report import render_mail_html as _rmail  # noqa: E402
+from engine.synthesize import generate as _gen  # noqa: E402
+
+_rp = _gen(datetime(2026, 9, 29, 8, 0))   # 固定日期，保证这份快照可复现
+_mail_html = _rmail(_rp)
+
+_BANNED = ["display:flex", "display: flex", "display:grid", "display: grid",
+           "var(--", "::before", "::after", "linear-gradient",
+           "position:absolute", "position: absolute", "position:fixed"]
+_hit = [b for b in _BANNED if b in _mail_html]
+check("邮件版无客户端禁用CSS", _hit, [])
+
+check("邮件版无<style>块(会被剥离)", "<style" in _mail_html, False)
+
+_ext = re.findall(r'(?:src|href)\s*=\s*["\']([^"\']+)', _mail_html)
+check("邮件版无外部图片/字体/JS", [u for u in _ext if not u.startswith("#")], [])
+
+check("邮件版宽600px", 'max-width:600px' in _mail_html, True)
+
+# 标签必须严格配对，否则 Outlook 会把后半截整段吞掉
+for _tag in ("table", "tr", "td", "div"):
+    _o = len(re.findall(r"<" + _tag + r"[\s>]", _mail_html))
+    _c = len(re.findall(r"</" + _tag + r">", _mail_html))
+    check(f"邮件版 <{_tag}> 标签配对", _o == _c, True)
+
+# 关键栏目一个都不能少 —— 漏栏目比样式错更严重，肉眼不一定看得出来
+_MARKERS = {
+    "本命提要": False, "每日一卦": False, "五门评分": False, "日常生活": False,
+    "健康": False, "出行方位": False, "人际关系": False, "投资": False,
+    "传统文化学习": False, "今日打卡清单": False,
+}
+_missing = [k for k in _MARKERS if k not in _mail_html]
+check("邮件版栏目齐全", _missing, [])
+
+check("邮件版今日速览含宜忌", "宜：" in _mail_html and "忌：" in _mail_html, True)
+check("邮件版含综合分数", f'{_rp["meta"]["total"]:.0f}' in _mail_html, True)
+
+if _rp.get("zhouyi"):
+    check("邮件版含卦名", _rp["zhouyi"]["name"] in _mail_html, True)
+    check("邮件版含卦辞", _rp["zhouyi"]["ci"][:8] in _mail_html, True)
+    # 爻图：六爻必须各画一条，阳爻整条、阴爻断开两截
+    check("邮件版六爻齐全", _mail_html.count('height="9"') >= 6, True)
+
+check("邮件版结构完整收口", _mail_html.strip().endswith("</html>"), True)
+
+# 内容等价性：邮件版不应比文本版少信息（文本里的每个小节标题邮箱里都该有）
+_txt = _rtxt(_rp)
+_CORE = ["【五门评分】", "【日常生活】", "【健康】", "【出行】", "【人际】",
+         "【投资】", "【学习】", "【今日打卡】"]
+check("文本版小节完整", [c for c in _CORE if c not in _txt], [])
 
 print()
 print("=" * 78)
