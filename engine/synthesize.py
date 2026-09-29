@@ -31,7 +31,7 @@ from .base import (
     clamp, WX_SHENG, WX_SHENG_BY, WX_KE, WX_KE_BY, zhi_wuxing, gan_wuxing,
     solar_term_datetime, GAN_YANG,
 )
-from . import bazi, qimen, liuren, yijing, market, lottery
+from . import bazi, qimen, liuren, yijing, market, lottery, zhouyi
 from .lunar import lunar_info
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -176,6 +176,7 @@ def generate(target: datetime, profile: Optional[Dict] = None,
     return {
         "meta": _meta(ctx),
         "destiny": _destiny_summary(ctx),
+        "zhouyi": _zhouyi(ctx),
         "five": _five_panels(ctx),
         "general": _general(ctx),
         "career": career,
@@ -234,6 +235,20 @@ def _destiny_summary(ctx) -> Dict:
         "liunian": JIA_ZI[bz.liunian_idx],
         "stars": bz.stars_all,
     }
+
+
+def _zhouyi(ctx) -> Dict:
+    """每日一卦（大衍筮法）——本命提要之下的独立栏目，不并入五门评分"""
+    bz: bazi.BaZiResult = ctx["bz"]
+    prof = ctx["profile"]
+    b = prof["birth"]
+    # 个人标识：同一人对同一日必得同一卦；换人则卦亦不同
+    personal = f"{prof.get('name', '')}|{b['year']}-{b['month']}-{b['day']}|{bz.day_master}"
+    return zhouyi.daily_block(
+        ctx["target"], personal=personal,
+        day_master_wx=gan_wuxing(bz.day_master),
+        yong_shen=list(bz.yong_shen_wx),
+    )
 
 
 def _five_panels(ctx) -> List[Dict]:
