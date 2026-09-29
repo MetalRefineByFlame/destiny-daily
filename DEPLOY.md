@@ -193,17 +193,21 @@ GitHub → Settings → Developer settings → Personal access tokens → **Fine
 
 ### 第 3 步：部署触发 Worker
 
+> ⚠ **务必用 wrangler，不要用 REST API 直接传脚本**（血泪教训，见文末实况记录）。
+
 ```bash
 cd cloudflare
 npm i -g wrangler          # 已有可跳过
-wrangler login
 
-wrangler secret put GITHUB_TOKEN     # 粘贴第 2 步的 token
-wrangler secret put GITHUB_OWNER     # 例：jianggongzi
-wrangler secret put GITHUB_REPO      # 例：destiny-daily
+export CLOUDFLARE_API_TOKEN=<cfut_ 开头的 API Token>
+export CLOUDFLARE_ACCOUNT_ID=<32 位 Account ID>
 
-wrangler deploy
+wrangler deploy                      # 明文变量从 wrangler.toml 的 [vars] 读
+echo "<github_pat_...>" | wrangler secret put GITHUB_TOKEN
 ```
+
+`wrangler.toml` 里已写死 `GITHUB_OWNER` / `GITHUB_REPO`（明文无害），
+只有 `GITHUB_TOKEN` 走 Secret。**重新 deploy 不会冲掉 Secret**，只有换 token 时才重跑那一条命令。
 
 ### 第 4 步：立刻验证（不要等到明早）
 
@@ -275,12 +279,49 @@ Cron 一律 **UTC**：
 
 ---
 
+## 三条通道如何共存（当日幂等）
+
+Cloudflare cron、GitHub 自家 schedule、手动 dispatch 三条路同时开着。
+靠「当日幂等」保证**一天只发一封**，不会互相打架：
+
+```
+                ┌─ Cloudflare cron ── 北京 08:00 准点触发 ──┐
+任一通道 ────────┼─ workflow_dispatch ── 手动补发 ──────────┼─→ should-run job
+                └─ GitHub schedule ── 08/09/…/13 点各试一次 ─┘        │
+                                                                     ▼
+                                          ① 时间闸门：schedule 早于 08:00 → 跳过
+                                          ② 查标记：destiny-sent-YYYY-MM-DD 命中 → 跳过
+                                          ③ 放行 → daily-report 生成并发信 → 写标记
+```
+
+标记用 **GitHub Actions Cache**（key = `destiny-sent-<北京日期>`）：免费、无需外部存储、
+7 天自动过期。日志里的判别原文是：
+
+```
+Cache hit for: destiny-sent-2026-09-29
+今天 2026-09-29 已经成功发过，跳过本次
+```
+
+三条路的定位：
+
+| 通道 | 作用 | 触发时是否受时间闸门限制 |
+|---|---|---|
+| Cloudflare cron | 主力，准点 | 否，一律放行 |
+| workflow_dispatch | 手动补发 | 否；但受幂等限制，**勾 `force` 可强制发** |
+| GitHub schedule | 自愈兜底 | 是，早于 08:00 跳过；到点后同样受幂等限制 |
+
+也就是说：CF 正常时它先发出去，之后所有其他尝试都会因标记命中而自动歇菜；
+万一 CF 挂了，GitHub 的兜底窗口会在 08:17 之后补上；两边同时挂才会漏。
+
+---
+
 ## 失败保护
 
 - **Secrets 缺失**会在第一步红叉并列出缺哪个，避免产出基于占位生日的错报告
 - **BTC 行情抓取失败**会优雅降级（报告注明"行情未取到"），不会让整轮任务失败
 - **报告生成失败**会发一封标题带 `[失败]` 的告警邮件，不会静默无声
-- 想要更保险的监控：在 Worker 里加一道"9:00 还没收到成功回调就告警"的逻辑
+- **当日幂等**保证任何情况下都不会重复轰炸邮箱（除非手动勾 `force`）
+- Worker 里的 dispatch 失败会 throw，在 CF 后台的 cron 记录里标成失败，便于察觉
 
 ## 部署完成后
 
@@ -289,3 +330,105 @@ Cron 一律 **UTC**：
 ```python
 automation_update(mode="update", id="ad2a1880-6dbe-4440-b660-d2b7189ac2b7", status="PAUSED")
 ```
+
+---
+
+## 本次实况记录（2026-09-29 · 已全部跑通）
+
+| 项 | 值 |
+|---|---|
+| GitHub 仓库 | https://github.com/MetalRefineByFlame/destiny-daily （Public） |
+| Actions Secrets | 10 个已写入（DESTINY_* 5 个 + SMTP_* 4 个 + MAIL_TO） |
+| 首次手动运行 | run 36525614135，全步骤 success，邮件已投递 |
+| Cloudflare Account ID | `acdac70d5e21b2c1c88c9086b127cfe3` |
+| Worker 名称 | `destiny-daily-scheduler` |
+| Worker 子域 | `destiny49.workers.dev` |
+| Cron | `0 0 * * *`（UTC 00:00 = 北京 08:00） |
+| 诊断端点 | `/health` 看绑定是否齐全，`/trigger` 立即触发一次 |
+| 本机自动化 | `每日运势早报（五术日课）` 已 **PAUSED**，避免收发两条路重复 |
+
+### 端到端验证记录
+
+把 cron 临时改成 `* * * * *` 后的第一次验证（这是唯一可靠的验证方式，理由见踩坑 3）：
+
+```
+2026-09-29T06:38:47Z | repository_dispatch | completed success   ← Cloudflare cron 真的自动叫醒了 GitHub
+```
+
+幂等验证：同一天再触发两次，`should-run` 判定 cache hit，`daily-report` **skipped**，邮箱没被轰炸。
+
+### 踩过的坑（按重要性排序）
+
+**1. REST API 上传 Worker 是假成功 —— 522 的唯一原因**
+
+只用 `PUT /workers/scripts/{name}` 传脚本，返回 200，`GET /workers/scripts/{name}` 也能读到源码，
+一切都像成功了。但 `GET /workers/deployments/by-script/{name}` 返回
+`10007 This Worker does not exist on your account` —— **没有生成部署版本**。
+结果 workers.dev 域名背后空无一物，任何请求都是 `HTTP 522`（CF 边缘连不到源站）。
+
+判断依据：用只返回 `pong` 的最小 Worker 做对照，同样 522，排除代码问题。
+修复：改用 `wrangler deploy`。它会输出 `Current Version ID: ...`，拿到这个 ID 才算真的部署成功。
+
+顺带记一笔：`PUT /workers/scripts/{name}/versions`（wrangler 内部用的两步式 API）
+对 API Token 返回 `405 Method not allowed for this authentication scheme`，此路不通。
+
+**2. wrangler 部署会覆盖 bindings**
+
+之前通过 REST API 设在 metadata 里的 `GITHUB_OWNER`/`GITHUB_REPO`/`GITHUB_TOKEN`，
+wrangler 部署后全部消失（它以 `wrangler.toml` 为准），于是请求打到
+`api.github.com/repos/undefined/undefined/dispatches`，Worker 抛异常 → `HTTP 1101`。
+
+修复：明文变量写进 `[vars]`，机密走 `wrangler secret put`。
+同时给 Worker 加了 `/health` 端点和「缺失 binding 时不抛异常」的防御——
+因为 uncaught exception 在 Worker 里只会变成 Cloudflare 的 1101 错误页，看不到任何线索。
+
+**3. 本机根本测不了 workers.dev，只能用 CF 自己验证**
+
+本机所有出网都走沙箱代理：curl 直接返回 `HTTP 000`，Python urllib 报
+`Tunnel connection failed: 502 Bad Gateway`。外部公共代理（allorigins / codetabs）
+要么自报 5xx，要么被目标判定为错误源。
+
+绕开办法：**把 cron 临时改成 `* * * * *`，等两分钟，去 GitHub Actions 看有没有新的
+`repository_dispatch` 运行**。Cloudflare 内部触发不经过本机网络，这是唯一可信的验证路径。
+验证完立刻改回 `0 0 * * *` 重新部署（每分钟触发会疯狂发邮件）。
+
+**4. npm 装 wrangler 缺平台二进制**
+
+`Error: The package "@cloudflare/workerd-windows-64" could not be found`、
+同理 `@esbuild/win32-x64`。这是 optionalDependencies 被跳过导致的。
+补装即可：`npm install @cloudflare/workerd-windows-64 @esbuild/win32-x64`。
+
+---
+
+## 日常运维
+
+**改了 Worker 代码**（凭据与 CF 环境变量照旧）：
+
+```bash
+cd cloudflare
+export CLOUDFLARE_API_TOKEN=<token>
+export CLOUDFLARE_ACCOUNT_ID=acdac70d5e21b2c1c88c9086b127cfe3
+wrangler deploy
+```
+
+**改了报告逻辑**：直接 `git push` 即可，Actions 会自动用新代码。
+注意本机 `git push` 也会被沙箱拦，需要时用 REST API 的 `PUT /contents/{path}` 逐文件更新。
+
+**换 GitHub token**（最长 1 年，到期会静默停推，务必提前换）：
+
+```bash
+echo "<新的 github_pat_...>" | wrangler secret put GITHUB_TOKEN
+```
+
+**只改一次 Secret，不用重新部署 Worker。**
+
+**今天想再收一封**：Actions 页面 → Run workflow → 勾 `force` → Run。
+不勾的话会被幂等标记拦住（这是设计意图）。
+
+**怀疑链路挂了时**，按顺序查这三处：
+
+1. Worker 是否活着：`https://destiny-daily-scheduler.destiny49.workers.dev/health`
+   —— 返回 JSON 且三个 binding 都是 `true` 才正常
+2. CF 后台 Workers → destiny-daily-scheduler → **Triggers** 页看 cron 最近一次执行是否成功
+3. GitHub 仓库 → Actions 页看当天有没有成功的运行记录；
+   看 Multi-window 兜底是否补上（会有 `跳过本次` 的记录，属正常）
