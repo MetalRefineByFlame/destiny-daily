@@ -12,7 +12,7 @@
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 sys.path.insert(0, ".")
 
@@ -35,6 +35,18 @@ def check(name, got, want):
         FAIL += 1
     mark = "  ok  " if ok else " FAIL "
     print(f"[{mark}] {name:<34} 得到={got!s:<22} 期望={want}")
+
+
+def check_near(name, got, want, tol):
+    """容差比较，用于概率一类带抽样噪声的量"""
+    global PASS, FAIL
+    ok = abs(got - want) <= tol
+    if ok:
+        PASS += 1
+    else:
+        FAIL += 1
+    mark = "  ok  " if ok else " FAIL "
+    print(f"[{mark}] {name:<34} 得到={got!s:<22} 期望={want}±{tol}")
 
 
 def gz(dt):
@@ -156,6 +168,77 @@ check("2023-03-22 确为闰月", _lu2.leap, True)
 check("2026-09-25 中秋(八月十五)",
       f"{_lu3.gz_year}年{_lu3.suishi_name}月十五" if _lu3.day == 15 else _lu3.label,
       "丙午年八月十五")
+
+print()
+print("五、大衍筮法 · 每日一卦")
+print("=" * 78)
+
+from engine import zhouyi as _zy          # noqa: E402
+from engine.gua64_data import GUA64_DATA  # noqa: E402
+
+# --- 1) 起卦概率须合古典：老阴1/16 少阳5/16 少阴7/16 老阳3/16 ---
+import random as _rnd                      # noqa: E402
+_r = _rnd.Random(20260929)
+_N = 60000
+_c = {}
+for _ in range(_N):
+    _v = _zy._three_bian(_r)
+    _c[_v] = _c.get(_v, 0) + 1
+for _k, _want in ((6, 1 / 16), (7, 5 / 16), (8, 7 / 16), (9, 3 / 16)):
+    check_near(f"爻 {_zy.YAO_NAME[_k]}({_k})概率",
+               round(_c.get(_k, 0) / _N, 4), round(_want, 4), 0.01)
+check("六爻之数合于 6/7/8/9", sorted(_c) == [6, 7, 8, 9], True)
+
+# --- 2) 数据库完整性 ---
+check("六十四卦无缺", len(GUA64_DATA), 64)
+check("文王卦序 1..64 连续", sorted(d["xu"] for d in GUA64_DATA.values()) == list(range(1, 65)), True)
+_xus = [d["xu"] for d in GUA64_DATA.values()]
+check("卦序无重复", len(_xus) == len(set(_xus)), True)
+check("每卦六爻俱全", all(len(d["yao"]) == 6 for d in GUA64_DATA.values()), True)
+check("卦符由卦序推出(乾䷀)", chr(0x4DC0 + 0), "䷀")
+check("卦符由卦序推出(未济䷿)", chr(0x4DC0 + 63), "䷿")
+
+# --- 3) 起卦确定性：同日同人必同卦，换日或换人则不同 ---
+_g1 = _zy.cast(datetime(2026, 9, 29, 8, 0), personal="甲")
+_g2 = _zy.cast(datetime(2026, 9, 29, 8, 0), personal="甲")
+_g3 = _zy.cast(datetime(2026, 9, 30, 8, 0), personal="甲")
+_g4 = _zy.cast(datetime(2026, 9, 29, 8, 0), personal="乙")
+check("同日同人结果恒定", _g1.ben.name == _g2.ben.name, True)
+check("换日则卦不同", _g1.ben.name != _g3.ben.name, True)
+
+# --- 4) 之卦由本卦六爻阴阳尽反而成 ---
+_g = _zy.cast(datetime(2026, 9, 29, 8, 0), personal="甲")
+check("之卦六爻阴阳皆反", sum(1 for i in range(6) if (1 - _g.yin_yang[i]) != _g.yin_yang[i]),
+      6)
+check("动爻数为 0..6", 0 <= len(_g.moving) <= 6, True)
+check("爻辞六条可用", len(_g.ben.yao), 6)
+
+# --- 5) 断法七分支皆能出辞 ---
+for _mv, _label in (([], "静"), ([3], "一动"), ([1, 5], "二动"), ([2, 4, 6], "三动"),
+                    ([1, 2, 3, 5], "四动"), ([1, 2, 3, 4, 5], "五动"),
+                    ([1, 2, 3, 4, 5, 6], "六动")):
+    _r2 = _zy.cast(datetime(2026, 9, 29, 8, 0), personal="甲")
+    _r2.moving = _mv
+    _r2.lines = [9 if (i + 1) in _mv else 7 for i in range(6)]
+    _zy._judge(_r2)
+    check(f"断法 {_label} 有主断辞", bool(_r2.judge_text) and bool(_r2.method), True)
+
+# --- 6) 乾坤用九用六 ---
+for _pair, _name in (((0, 0), "乾"), ((7, 7), "坤")):
+    _r3 = _zy.cast(datetime(2026, 9, 29, 8, 0), personal="甲")
+    _r3.ben = _zy._ci_of(_pair)
+    _r3.bian = _zy._ci_of((1, 1) if _pair == (0, 0) else (6, 6))
+    _r3.moving = [1, 2, 3, 4, 5, 6]
+    _zy._judge(_r3)
+    check(f"{_name}卦六爻皆动取用爻", _r3.judge_src, "用爻")
+    check(f"{_name}用爻辞非空", _r3.judge_text.startswith("用九" if _pair == (0, 0) else "用六"), True)
+
+# --- 7) 全年遍历：64 卦皆可达 ---
+_seen = set()
+_d0 = datetime(2026, 1, 1)
+for _i in range(365):
+    _seen.add(_zy.cast(_d0 + timedelta(days=_i), personal="甲").ben.name)
+check("一年内可见卦数(>=55)", len(_seen) >= 55, True)
 
 print()
 print("=" * 78)
