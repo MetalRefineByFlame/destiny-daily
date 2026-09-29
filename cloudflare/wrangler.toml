@@ -4,11 +4,17 @@
 #   北京时间 08:00  ==  UTC 00:00
 #   北京位于 UTC+8，无夏令时，全年固定，不必随季节调整。
 #
-# 部署后在 Dashboard 或 wrangler 里设置以下变量（GITHUB_TOKEN 必须加密）：
-#   GITHUB_OWNER   GitHub 用户名，例：jianggongzi
-#   GITHUB_REPO    仓库名，例：destiny-daily
-#   GITHUB_TOKEN   Personal Access Token（fine-grained，权限：Actions=Read and write）
-#                  用 wrangler secret put GITHUB_TOKEN 写入，不要写进本文件
+# 变量说明：
+#   GITHUB_OWNER / GITHUB_REPO   明文写在下面 [vars]，无害
+#   GITHUB_TOKEN                 必须走 Secret，切勿写进本文件
+#     部署后写入一次即可（后续重新 deploy 不会丢失）：
+#       export CLOUDFLARE_API_TOKEN=<CF 令牌>
+#       echo "<github_pat_...>" | npx wrangler secret put GITHUB_TOKEN
+#
+# ⚠ 踩坑记录（2026-09-29）：只用 REST API 的 PUT /workers/scripts/{name} 上传脚本，
+#   脚本内容会存进去（GET 能看到），但**不会创建 deployment**，
+#   于是 workers.dev 域名背后是空的 —— 表现为 HTTP 522。
+#   必须用 wrangler deploy（或 versions + deployments 两步 API）才会真正发布。
 
 name = "destiny-daily-scheduler"
 main = "trigger-worker.js"
@@ -16,6 +22,10 @@ compatibility_date = "2026-09-01"
 
 [triggers]
 crons = ["0 0 * * *"]
+
+[vars]
+GITHUB_OWNER = "MetalRefineByFlame"
+GITHUB_REPO = "destiny-daily"
 
 [observability]
 enabled = true
