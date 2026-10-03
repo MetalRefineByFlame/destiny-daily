@@ -31,7 +31,8 @@ from .base import (
     clamp, WX_SHENG, WX_SHENG_BY, WX_KE, WX_KE_BY, zhi_wuxing, gan_wuxing,
     solar_term_datetime, GAN_YANG,
 )
-from . import bazi, qimen, liuren, yijing, market, lottery, zhouyi, classic
+from . import (bazi, qimen, liuren, yijing, market, lottery, zhouyi,
+               classic, curriculum)
 from .lunar import lunar_info
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -881,12 +882,9 @@ def _study(ctx) -> Dict:
                         + ctx["parts"]["meihua"] * 0.2
                         + ctx["parts"]["qimen"] * 0.15 + bonus), 1)
     t = tier(score)
-    # daily_practice = 每日功课（固定出现）；domains = 轮换专题
-    daily = study.get("daily_practice", "")
-    domains = study.get("domains", [])
-    n = max(1, len(domains))
-    idx = day_gz(ctx["target"]) % n
-    focus = domains[idx] if domains else "易经原文"
+    # 系统课：按日推进、每天一节，不再在几个专题间轮换（旧版每隔几天就是同一句话）
+    lesson = curriculum.lesson_for(ctx["target"])
+    focus = f"{lesson['track']} · {lesson['title']}"
 
     headline = [
         "心神易散，只做轻量复习与抄录，不宜啃硬骨头。",
@@ -896,38 +894,11 @@ def _study(ctx) -> Dict:
         "领悟力强，宜读经典原文、做批注与印证。",
     ][t]
 
-    # 当日主攻内容
-    DOMAIN_PLAN = {
-        "炁体源流": "今日读《炁体源流》一篇：先读原文不求甚解，再把论「气」的句子抄一遍，"
-                    "与今晨练八部金刚功时的呼吸与体感对照，记在功法笔记里。",
-        "荀爽·玄秘入门": "今日看《古中国玄秘入门》一集（玄学与术数概览 / 易经纲领《易传》/"
-                         " 阴阳爻与四象 / 二分二至与四季流转）。看完用自己的话写 5 行要点，"
-                         "重点体会「象」是怎么形成的，不要急着背术语。",
-        "荀爽·八字格局": "今日看荀爽八字格局系列一集（以生论格局 / 以克论格局 / 制用官杀 /"
-                         " 制用枭印）。看完拿自己或一位熟人的八字，按他的判断顺序走一遍，"
-                         "明确记下卡在哪一步。",
-        "荀爽·阴符经": "今日看《阴符经》一讲。重点落在「人知其神之神，不知不神之所以神」"
-                       "这一句，结合自己最近的处境写 3 行体会，别抄讲义。",
-        "荀爽·精神分析": "今日看《精神分析入门》一集（Lacan 镜像自我 / 自恋 / 移情）。"
-                         "看完只做一件事：找出最近一次情绪反应里「我以为对方在看的我」。",
-        "八字": "今日可练：取三位熟人八字，只练「定格局 + 取用神」两步，写在纸上再对答案。",
-        "奇门遁甲": "今日可练：任选一个时辰手工排地盘三奇六仪，核对值符值使落宫。",
-        "大六壬": "今日可练：起一课，只求「四课三传」，写出课体名与判断依据。",
-        "梅花易数": "今日可练：以所见外应起一卦，先断体用生克，再看卦象。",
-        "六爻纳甲": "今日可练：装一卦的纳甲六亲六神，重点核对六神起例与世应。",
-        "黄帝内经": "今日可读：《素问·四气调神大论》，结合当日节气体会「春夏养阳」。",
-        "易经原文": "今日可读：取一卦，先读卦辞彖辞，再看爻辞，不与注释抢跑。",
-    }
-    plan = [f"今日主攻：{daily + '（每日功课）' if daily else ''}"
-            f"{'　+　' if daily else ''}{focus}（轮换专题）"]
-    if daily:
-        plan.append("■ " + DOMAIN_PLAN.get(daily, f"围绕「{daily}」做专题研读 30~60 分钟。"))
-    plan.append("■ " + DOMAIN_PLAN.get(focus, f"围绕「{focus}」做专题研读 30~60 分钟。"))
-    plan += [
+    plan = [
         f"推荐时段：{_best_windows(ctx)}——此时段气机最清、记诵效率最高。",
         f"本周目标 {study.get('weekly_hours', 6)} 小时，今日建议投入 "
         f"{'20~30 分钟' if t <= 1 else '45~60 分钟' if t <= 3 else '60~90 分钟'}。",
-        "方法建议：读原文 30 分钟 → 手写笔记 10 分钟 → 用自己的话复述 5 分钟。",
+        "方法建议：看讲解或读原文 30 分钟 → 手写笔记 10 分钟 → 用自己的话复述 5 分钟。",
     ]
 
     return {
@@ -936,6 +907,7 @@ def _study(ctx) -> Dict:
         "focus": focus,
         "notes": notes,
         "plan": plan,
+        "lesson": lesson,
     }
 
 
