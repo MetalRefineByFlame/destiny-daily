@@ -192,7 +192,7 @@ def watch_rows(symbols: Optional[List[str]] = None,
     """取观察清单行情。失败或 offline 时降级：仍返回清单（名称+理由），只是没有价格。"""
     symbols = symbols or [w[0] for w in WATCHLIST]
     meta = {w[0]: w for w in WATCHLIST}
-    snap = ({"ok": False, "rows": {}, "ts": "", "error": "offline"}
+    snap = ({"ok": False, "rows": {}, "ts": "", "source": "", "error": "offline"}
             if offline else market.build_watch(symbols))
     rows = []
     for s in symbols:
@@ -208,7 +208,8 @@ def watch_rows(symbols: Optional[List[str]] = None,
             row["price_txt"] = _fmt_price(q["price"])
         rows.append(row)
     return {"ok": snap.get("ok", False), "rows": rows,
-            "ts": snap.get("ts", ""), "error": snap.get("error", "")}
+            "ts": snap.get("ts", ""), "source": snap.get("source", ""),
+            "error": snap.get("error", "")}
 
 
 # 轮换起始日：对齐到本板块上线日 2026-10-03，使首日从第 1 条（价值最高的通道）开始，
@@ -255,7 +256,8 @@ def build(target: datetime, cai_score: float,
     except Exception as e:                  # noqa: BLE001
         watch = {"ok": False, "rows": [
             {"sym": s, "name": nm, "role": rl, "why": why, "ok": False}
-            for s, nm, rl, why in WATCHLIST], "ts": "", "error": repr(e)[:120]}
+            for s, nm, rl, why in WATCHLIST], "ts": "", "source": "",
+            "error": repr(e)[:120]}
     return {
         "focus": w["focus"],
         "glance": w["glance"],
