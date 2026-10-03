@@ -191,7 +191,6 @@ def generate(target: datetime, profile: Optional[Dict] = None,
         "social": _social(ctx),
         "invest": _invest(ctx),
         "study": study,
-        "checklist": _checklist(ctx, health, study),
         "disclaimer": DISCLAIMER,
     }
 
@@ -1032,21 +1031,6 @@ def _career(ctx) -> Dict:
         "line": line_name,
         "today_star": tg,
     }
-
-
-# ---------------------------------------------------------------- 打卡清单
-
-
-def _checklist(ctx, health: Dict, study: Dict) -> List[Dict]:
-    split = health["training"][0].split("：")[-1]
-    return [
-        {"icon": "\u262f", "task": "八部金刚功 · 早课一遍（卯时 05:00~07:00）", "tag": "气功", "mins": 20},
-        {"icon": "\U0001F3CB", "task": f"力量训练 · {split}", "tag": "健身", "mins": 60},
-        {"icon": "\U0001F95B", "task": "蛋白质达标（体重kg × 1.8g）", "tag": "饮食", "mins": 0},
-        {"icon": "\U0001F4D6", "task": f"传统文化研读 · {study['focus']}",
-         "tag": "学习", "mins": 45},
-        {"icon": "\U0001F4A7", "task": "饮水 2L · 23:00 前入睡", "tag": "作息", "mins": 0},
-    ]
 
 
 if __name__ == "__main__":
