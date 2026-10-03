@@ -256,7 +256,8 @@ from engine.mail_report import render_mail_html as _rmail  # noqa: E402
 from engine.synthesize import generate as _gen  # noqa: E402
 
 # 固定日期保证快照可复现
-_rp = _gen(datetime(2026, 9, 29, 8, 0))
+# offline=True：观察清单的行情抓取依赖外网，测试不因源抖动而红
+_rp = _gen(datetime(2026, 9, 29, 8, 0), offline=True)
 _mail_html = _rmail(_rp)
 _rhtml = _rhtm(_rp)
 
@@ -499,6 +500,102 @@ check("邮件版带今日一课", _e(_lsn["title"])[:10] in _mail_html, True)
 check("邮件版带链接", "search.bilibili.com" in _mail_html, True)
 # 旧版那句写死的「轮换专题」不该再出现
 check("旧版轮换文案已清除", "（轮换专题）" in _rhtml or "（轮换专题）" in _mail_html, False)
+
+# ---------------------------------------------------------------- 数字资产：羊毛 + 观察清单
+print()
+print("-" * 78)
+print("11) 数字资产（wool：平台活动薅羊毛 + 观察清单）")
+print("-" * 78)
+
+from engine import wool as _wo  # noqa: E402
+
+# --- BTC 复盘必须彻底消失 ---
+check("报告不再有 btc 字段", "btc" in _rp["invest"], False)
+check("三版均无「BTC 复盘」字样",
+      [n for n, s in (("文本", _txt), ("浏览器", _rhtml), ("邮件", _mail_html))
+       if "BTC 复盘" in s], [])
+_src = ""
+for _f_ in ("engine/synthesize.py", "engine/report.py", "engine/mail_report.py"):
+    with open(_f_, encoding="utf-8") as _fh:
+        _src += _fh.read()
+check("源码不再调用 market.review", "market.review" in _src, False)
+check("源码不再引用 inv['btc'] 取值", "get(\"btc\"" in _src, False)
+
+# --- 常青羊毛库完整性 ---
+check("羊毛库条目数", len(_wo.WOOL), 14)
+check("条目 key 唯一", len({w["key"] for w in _wo.WOOL}), len(_wo.WOOL))
+check("条目字段无空缺",
+      [w["key"] for w in _wo.WOOL
+       if not all(w.get(k) for k in ("name", "kind", "need", "how",
+                                     "gain", "risk", "link", "one"))], [])
+check("星级在 1~5", [w["key"] for w in _wo.WOOL
+                     if not 1 <= w["stars"] <= 5], [])
+check("链接均为 https",
+      [w["key"] for w in _wo.WOOL if not w["link"].startswith("https://")], [])
+# 双币投资是高风险产品，必须被明确标出来，不能混在羊毛里
+_dual = next(w for w in _wo.WOOL if w["key"] == "dual")
+check("双币投资标为高风险", "高风险" in _dual["kind"] and _dual["stars"] <= 1, True)
+check("高风险项文案含警示", "不是羊毛" in _dual["risk"], True)
+check("防坑清单不少于5条", len(_wo.SAFETY) >= 5, True)
+
+# --- 轮换：确定性 + 覆盖全库 ---
+_p0 = _wo.pick_wool(_d0)
+_p0b = _wo.pick_wool(_d0)
+check("同一天结果一致", [w["key"] for w in _p0["focus"]],
+      [w["key"] for w in _p0b["focus"]])
+_n2 = len(_wo.WOOL)
+_seen = set()
+for _i in range(_n2):                       # 每天推进 2 条，走满 n/2 天即覆盖全库
+    _pk = _wo.pick_wool(_d0 + _td(days=_i))
+    _seen.update(w["key"] for w in _pk["focus"])
+check("半轮覆盖全部条目", len(_seen), _n2)
+check("重点条数", len(_p0["focus"]), 2)
+check("速览不与重点重复",
+      [w["key"] for w in _p0["glance"] if w["key"] in
+       {x["key"] for x in _p0["focus"]}], [])
+check("速览条数", len(_p0["glance"]), 4)
+check("首日从库首开始", _wo.pick_wool(_wo.datetime(2026, 10, 3))["cursor"], 0)
+
+# --- 财气分档建议 ---
+_a1, _a2, _a3, _a4 = (_wo.wool_advice(s) for s in (80.0, 55.0, 45.0, 30.0))
+check("四档建议各不相同", len({_a1, _a2, _a3, _a4}), 4)
+check("偏弱档明确收缩动作", "不做新开仓" in _a3, True)
+check("极弱档明确只收不进", "一律不动" in _a4, True)
+
+# --- 观察清单 ---
+_wl = _wo.watch_rows(offline=True)
+check("离线时优雅降级", _wl["ok"], False)
+check("离线仍列全清单", len(_wl["rows"]), len(_wo.WATCHLIST))
+check("清单每项有名称与观察理由",
+      [r["name"] for r in _wl["rows"] if not r.get("why")], [])
+check("清单定位齐备", [r["name"] for r in _wl["rows"] if not r.get("role")], [])
+check("未取到时无价格字段", [r["name"] for r in _wl["rows"]
+                             if r.get("ok") and "price_txt" not in r], [])
+check("观察清单含 BNB（与羊毛门槛相关）",
+      any(r["name"] == "BNB" for r in _wl["rows"]), True)
+
+# --- 三版渲染 ---
+_as = _rp["invest"].get("assets") or {}
+check("报告已带 assets 字段", bool(_as), True)
+check("文本版带薅羊毛段", "平台活动薅羊毛" in _rtxt(_rp), True)
+check("文本版带观察清单", "观察清单" in _rtxt(_rp), True)
+check("浏览器版带薅羊毛段", "平台活动薅羊毛" in _rhtml, True)
+check("邮件版带薅羊毛段", "平台活动薅羊毛" in _mail_html, True)
+check("邮件版带观察清单", "观察清单" in _mail_html, True)
+check("邮件版带重点通道名", _e(_as["focus"][0]["name"]) in _mail_html, True)
+check("邮件版带官网链接", _as["focus"][0]["link"] in _mail_html, True)
+check("邮件版带防坑提醒", "防坑提醒" in _mail_html, True)
+# 行情未取到时，邮件里必须如实说明，不能默默留空
+check("离线时邮件标注未取到", "未取到" in _mail_html, True)
+check("保留仓位纪律段", "仓位与账户纪律" in _mail_html, True)
+
+# --- 观察清单表格在邮件里必须是 table（不能退化成 div+flex） ---
+_wpos = _mail_html.find("观察清单")
+_wm = _mail_html[_wpos:_wpos + 2500] if _wpos >= 0 else ""
+check("观察清单用 table 渲染", _wm.count("<table") >= 1, True)
+check("观察清单无禁用 CSS",
+      [b for b in ("display:flex", "display: grid", "var(--",
+                   "linear-gradient") if b in _wm], [])
 
 print()
 print("=" * 78)
