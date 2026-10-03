@@ -131,15 +131,6 @@ ul.tips li::before{content:"";position:absolute;left:5px;top:14px;width:6px;heig
 .yi-ji .y{color:var(--qing)} .yi-ji .j{color:var(--zhu)}
 .yi-ji p{margin:3px 0;font-size:13.5px}
 
-/* ---------- 打卡 ---------- */
-.checks{display:grid;gap:9px}
-.chk{display:flex;align-items:center;gap:11px;padding:11px 13px;border:1px solid var(--line);
-  border-radius:11px;background:#fdfbf6}
-.chk .boxf{width:19px;height:19px;border:2px solid #c9bfa6;border-radius:5px;flex:0 0 auto}
-.chk .t{flex:1;font-size:14px}
-.chk .tag{font-size:11.5px;color:var(--ink2);border:1px solid var(--line);
-  border-radius:6px;padding:1px 7px;background:#fff}
-
 /* ---------- 投资警示 ---------- */
 .risk{background:#fdf3f1;border:1px solid #e8cfc9;border-left:4px solid var(--zhu);
   border-radius:10px;padding:11px 14px;font-size:13.2px;color:#7c3b32;margin:12px 0}
@@ -682,11 +673,6 @@ def render_html(r: Dict) -> str:
     if r.get("classic"):
         body.append(_sec("典", "每日一句经典", _classic_section(r["classic"])))
 
-    checks = "".join(
-        f'<div class="chk"><span class="boxf"></span><span class="t">{_e(c["task"])}</span>'
-        f'<span class="tag">{_e(c["tag"])}</span></div>' for c in r["checklist"])
-    body.append(_sec("记", "今日打卡清单", f'<div class="checks">{checks}</div>'))
-
     body.append(f'<div class="disclaim">{_e(r["disclaimer"])}</div>')
     body.append(f'<div class="foot">destiny-daily v1.0 · 生成于 {_e(m["generated_at"])}</div>')
 
@@ -837,10 +823,6 @@ def render_text(r: Dict) -> str:
             L.append("")
         except Exception:        # noqa: BLE001
             pass
-    L.append("【今日打卡】")
-    for c in r["checklist"]:
-        L.append(f"  ☐ {c['task']}")
-    L.append("")
     L.append(r["disclaimer"])
     return "\n".join(L)
 
