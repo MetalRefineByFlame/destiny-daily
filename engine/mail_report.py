@@ -577,23 +577,6 @@ def _rel_cards(soc: Dict) -> str:
     return "".join(cards)
 
 
-def _checks(r: Dict) -> str:
-    rows = "".join(
-        f'<tr>'
-        f'<td width="26" valign="middle" style="padding:6px 0">'
-        f'<span style="{_f(13, INK, "normal", 1)}display:inline-block;width:17px;height:17px;'
-        f'line-height:17px;text-align:center;border:2px solid #c9bfa6;border-radius:5px">'
-        f'&nbsp;</span></td>'
-        f'<td valign="middle" style="padding:6px 0 6px 8px;'
-        f'{_f(13.5, INK, "normal", 1.6)}">{_e(c["task"])}</td>'
-        f'<td width="44" align="right" valign="middle" style="padding:6px 0">'
-        f'<span style="{_f(10.5, INK2, "normal", 1)}display:inline-block;padding:1px 7px;'
-        f'border:1px solid {LINE};border-radius:6px;background:{CARD}">'
-        f'{_e(c["tag"])}</span></td>'
-        f'</tr>' for c in r["checklist"])
-    return (f'<table width="100%" cellpadding="0" cellspacing="0" border="0">{rows}</table>')
-
-
 # ---------------------------------------------------------------- 每日一句经典
 
 
@@ -884,7 +867,6 @@ def render_mail_html(r: Dict) -> str:
                      + _tips(st["plan"]), st["score"]))
     if r.get("classic"):
         body.append(_classic_sec(r))
-    body.append(_sec("记", "今日打卡清单", _checks(r)))
 
     foot = ('<tr><td style="padding:0 18px">'
             f'<table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="{SOFT}" '
