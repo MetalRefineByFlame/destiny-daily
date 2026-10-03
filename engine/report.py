@@ -219,6 +219,23 @@ ul.tips li::before{content:"";position:absolute;left:5px;top:14px;width:6px;heig
 .cls-note{margin-top:11px;padding:10px 14px;background:#f6f9f4;border:1px solid #e3eadd;
   border-radius:9px;font-size:13.4px;line-height:1.8;color:#4a5a42}
 .cls-why{margin-top:10px;font-size:11.7px;color:#a09889;line-height:1.7}
+
+/* ---------- 今日一课（系统学习路线） ---------- */
+.lesson{border:1px solid var(--line);border-radius:11px;background:#fffdf8;overflow:hidden}
+.lsn-top{display:flex;align-items:center;gap:9px;padding:9px 15px;background:#f3ece0;
+  border-bottom:1px solid var(--line)}
+.lsn-track{font-size:12.6px;font-weight:700;color:#8a6d3b;letter-spacing:.02em}
+.lsn-prog{margin-left:auto;font-size:11.4px;color:#96897a}
+.lsn-body{padding:12px 15px}
+.lsn-title{font-size:15.2px;font-weight:700;color:#332e28;line-height:1.6;margin-bottom:8px}
+.lsn-quote{margin:0 0 10px;padding:9px 13px;background:#fbf7ee;border-left:3px solid var(--qing);
+  border-radius:0 8px 8px 0;font-size:13.6px;color:#4a5a42;line-height:1.85}
+.lsn-prac{margin-top:10px;padding:10px 13px;background:#f6f9f4;border:1px solid #e3eadd;
+  border-radius:9px;font-size:13.4px;color:#4a5a42;line-height:1.8}
+.lsn-links{margin-top:11px;display:flex;gap:8px;flex-wrap:wrap}
+.lsn-link{display:inline-block;padding:5px 13px;border-radius:18px;font-size:12.2px;
+  text-decoration:none;border:1px solid var(--line);background:#fff;color:#3d6b5a}
+.lsn-link:hover{background:#3d6b5a;color:#fff}
 """
 
 
@@ -371,6 +388,29 @@ def _jing_notice(z: Dict) -> str:
 
 
 # ---------------------------------------------------------------- 每日一句经典
+
+
+def _lesson_section(c: Dict) -> str:
+    """浏览器版「今日一课」——系统学习路线的当日小节，附讲解/原文链接。"""
+    if not c:
+        return ""
+    top = (f'<div class="lsn-top"><span class="lsn-track">{_e(c["track"])}</span>'
+           f'<span class="lsn-prog">第 {c["no"]}/{c["total"]} 节　'
+           f'总进度 {c["global_no"]}/{c["global_total"]}</span></div>')
+    body = [f'<div class="lsn-body"><div class="lsn-title">{_e(c["title"])}</div>']
+    if c.get("points"):
+        body.append(_tips(c["points"]))
+    if c.get("quote"):
+        body.append(f'<div class="lsn-quote">{_e(c["quote"])}</div>')
+    if c.get("practice"):
+        body.append(f'<div class="lsn-prac"><b>今日练习　</b>{_e(c["practice"])}</div>')
+    links = c.get("links") or []
+    if links:
+        body.append('<div class="lsn-links">' + "".join(
+            f'<a class="lsn-link" href="{_e(l["url"])}" target="_blank" '
+            f'rel="noopener">{_e(l["label"])} →</a>' for l in links) + "</div>")
+    body.append("</div>")
+    return f'<div class="lesson">{top}{"".join(body)}</div>'
 
 
 def _classic_section(c: Dict) -> str:
@@ -530,9 +570,11 @@ def render_html(r: Dict) -> str:
                    f'■ 彩票娱乐</div>{_tips(inv["lottery"])}{lot_html}')
     body.append(_sec("财", "投资 · 彩票 · 数字资产", invest_body, inv["score"]))
 
-    body.append(_sec("学", "传统文化学习",
+    body.append(_sec("学", "传统文化学习 · 今日一课",
                      f'<div style="font-size:15px;font-weight:600;margin-bottom:10px;color:#3f3a33">'
-                     f'{_e(st["headline"])}</div>{_tips(st["plan"])}', st["score"]))
+                     f'{_e(st["headline"])}</div>'
+                     f'{_lesson_section(st.get("lesson"))}{_tips(st["plan"])}',
+                     st["score"]))
 
     if r.get("classic"):
         body.append(_sec("典", "每日一句经典", _classic_section(r["classic"])))
@@ -651,6 +693,19 @@ def render_text(r: Dict) -> str:
     L.append(f"  {r['invest']['risk_banner']}")
     L.append("")
     L.append(f"【学习】{r['study']['headline']}")
+    les = r["study"].get("lesson")
+    if les:
+        L.append(f"  ▍今日一课：{les['title']}")
+        L.append(f"    {les['track']}（第 {les['no']}/{les['total']} 节，"
+                 f"总进度 {les['global_no']}/{les['global_total']}）")
+        for p in les.get("points", []):
+            L.append(f"    · {p}")
+        if les.get("quote"):
+            L.append(f"    【原文】{les['quote']}")
+        if les.get("practice"):
+            L.append(f"    【今日练习】{les['practice']}")
+        for l in les.get("links", []):
+            L.append(f"    【{l['label']}】{l['url']}")
     for t in r["study"]["plan"]:
         L.append(f"  · {t}")
     L.append("")
