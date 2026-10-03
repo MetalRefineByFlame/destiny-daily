@@ -32,7 +32,7 @@ from .base import (
     solar_term_datetime, GAN_YANG,
 )
 from . import (bazi, qimen, liuren, yijing, market, lottery, zhouyi,
-               classic, curriculum)
+               classic, curriculum, wool)
 from .lunar import lunar_info
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -129,7 +129,9 @@ def calibrate(key: str, raw: float) -> float:
 
 
 def generate(target: datetime, profile: Optional[Dict] = None,
-             longitude: Optional[float] = None) -> Dict:
+             longitude: Optional[float] = None,
+             offline: bool = False) -> Dict:
+    """offline=True 时跳过一切联网（行情抓取），用于测试与批量生成。"""
     target = ensure_cst(target)
     profile = profile or load_profile()
     if longitude is None:
@@ -168,7 +170,7 @@ def generate(target: datetime, profile: Optional[Dict] = None,
     ctx = dict(
         target=target, profile=profile, bz=bz, lr_day=lr_day,
         qm_day=qm_day, qm_am=qm_am, lr=lr, mh=mh, ly=ly,
-        lu=lu, total=total, male=male, parts=parts,
+        lu=lu, total=total, male=male, parts=parts, offline=offline,
     )
 
     health = _health(ctx)
@@ -782,15 +784,14 @@ def _invest(ctx) -> Dict:
         f"术数倾向：{action[0]}。{action[1]}",
         f"仓位纪律：单一标的占比不超过总资金 {max_pos}%，"
         f"单笔亏损止损不超过账户 {inv.get('crypto_alert_pct', 2.5)}%。",
-        "时段参考：" + _best_windows(ctx),
-        "要点：只做已在观察清单内的标的，不追涨杀跌、不加杠杆、不碰合约。"
-        "Binance 端建议开启提现白名单与二次验证。",
+        "账户安全：开启提现白名单与二次验证（2FA）；只做观察清单内的标的，"
+        "不加杠杆、不碰合约。",
     ]
 
-    # ---- BTC 技术面复盘（联网抓取，失败自动降级）----
-    yong = bz.yong_shen_wx[0] if bz.yong_shen_wx else "水"
-    snap = market.fetch_snapshot()
-    btc = market.review(snap, score, yong)
+    # ---- 数字资产：平台活动薅羊毛 + 观察清单（行情联网，失败自动降级）----
+    watch_syms = inv.get("watchlist") or None
+    assets = wool.build(ctx["target"], score, symbols=watch_syms,
+                        offline=bool(ctx.get("offline")))
 
     # ---- 彩票：以五门加权总分为主要参考，可给「不购买」建议，同一天只一个彩种 ----
     budget = inv.get("lottery_monthly_budget_cny", 100)
@@ -834,7 +835,7 @@ def _invest(ctx) -> Dict:
         "headline": f"财气指数 {score:.0f}｜{action[0]}",
         "notes": notes,
         "crypto": crypto,
-        "btc": btc,
+        "assets": assets,
         "lottery": lottery_lines,
         "lottery_detail": lotto,
         "lottery_score": lotto_score,
