@@ -220,6 +220,46 @@ ul.tips li::before{content:"";position:absolute;left:5px;top:14px;width:6px;heig
   border-radius:9px;font-size:13.4px;line-height:1.8;color:#4a5a42}
 .cls-why{margin-top:10px;font-size:11.7px;color:#a09889;line-height:1.7}
 
+/* ---------- 数字资产：平台活动 + 观察清单 ---------- */
+.wadv{font-size:12.9px;color:#4a443c;background:#f3f8f8;border:1px dashed #cbe0e0;
+  border-radius:9px;padding:9px 13px;line-height:1.72;margin-bottom:12px}
+.wool{display:grid;gap:11px}
+.wcard{border:1px solid var(--line);border-left:3px solid var(--qing);
+  border-radius:10px;padding:11px 14px;background:#fffdf8}
+.wcard.warn{border-left-color:var(--zhu)}
+.wch{display:flex;align-items:baseline;gap:8px;margin-bottom:7px;flex-wrap:wrap}
+.wch .wn{font-size:13.7px;font-weight:700;color:#332e28}
+.wch .wk{font-size:10.5px;color:#fff;background:var(--qing);border-radius:3px;
+  padding:1px 6px;letter-spacing:.02em}
+.wcard.warn .wch .wk{background:var(--zhu)}
+.wch .ws{margin-left:auto;font-size:11px;color:#b9963f;letter-spacing:.06em}
+.wrow{display:grid;grid-template-columns:52px 1fr;gap:5px 10px;font-size:12.5px;
+  line-height:1.68}
+.wrow .k{color:#8c8478;font-weight:600}
+.wrow .v{color:#4a443c}
+.wrow .v.risk{color:#a4532f}
+.wcard.warn .wrow .v.risk{color:#b0402f;font-weight:600}
+.wlink{display:inline-block;margin-top:8px;font-size:12px;color:var(--qing);
+  text-decoration:none;border-bottom:1px dotted var(--qing)}
+.wglance{display:grid;gap:6px;margin-top:12px;padding-top:10px;
+  border-top:1px dashed var(--line)}
+.wg{font-size:12.3px;color:#5c544b;line-height:1.62}
+.wg .n{color:#332e28;font-weight:600}
+.wg .o{color:#8c8478}
+.wtable{width:100%;border-collapse:collapse;font-size:12.4px;margin-top:2px}
+.wtable th{text-align:left;font-weight:600;color:#8c8478;font-size:11.4px;
+  padding:4px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+.wtable td{padding:7px 6px;border-bottom:1px dotted #efe9dc;color:#4a443c;
+  vertical-align:top;line-height:1.6}
+.wtable td.nm{font-weight:700;color:#332e28;white-space:nowrap}
+.wtable .role{display:block;font-weight:400;font-size:11px;color:#8c8478;
+  margin-top:2px}
+.wtable .why{display:block;font-size:11.3px;color:#8c8478;margin-top:3px}
+.wtable .up{color:#c0392b;font-weight:600}
+.wtable .dn{color:#1f8a5b;font-weight:600}
+.wtable .na{color:#b0a795}
+.wfoot{font-size:11.3px;color:#a09889;margin-top:10px;line-height:1.72}
+
 /* ---------- 今日一课（系统学习路线） ---------- */
 .lesson{border:1px solid var(--line);border-radius:11px;background:#fffdf8;overflow:hidden}
 .lsn-top{display:flex;align-items:center;gap:9px;padding:9px 15px;background:#f3ece0;
@@ -413,6 +453,69 @@ def _lesson_section(c: Dict) -> str:
     return f'<div class="lesson">{top}{"".join(body)}</div>'
 
 
+def _wool_card(w: Dict) -> str:
+    """一条羊毛通道的完整卡片。"""
+    warn = w.get("stars", 3) <= 1 or "高风险" in w.get("kind", "")
+    rows = [("门槛", w["need"], False), ("怎么薅", w["how"], False),
+            ("拿到什么", w["gain"], False), ("注意", w["risk"], True)]
+    body = "".join(
+        f'<div class="k">{k}</div><div class="v{" risk" if r else ""}">{_e(v)}</div>'
+        for k, v, r in rows)
+    return (
+        f'<div class="wcard{" warn" if warn else ""}">'
+        f'<div class="wch"><span class="wn">{_e(w["name"])}</span>'
+        f'<span class="wk">{_e(w["kind"])}</span>'
+        f'<span class="ws">{"★" * w["stars"]}{"☆" * (5 - w["stars"])}</span></div>'
+        f'<div class="wrow">{body}</div>'
+        f'<a class="wlink" href="{_e(w["link"])}" target="_blank">'
+        f'前往官网查看当期活动 ↗</a></div>')
+
+
+def _watch_table(watch: Dict) -> str:
+    """观察清单表格。行情未取到时仍列出标的与观察理由。"""
+    rows = []
+    for r in watch.get("rows", []):
+        if r.get("ok"):
+            cls = "up" if r["chg"] >= 0 else "dn"
+            price = f'{r["price_txt"]}'
+            chg = f'<span class="{cls}">{r["chg"]:+.2f}%</span>'
+            state = r.get("note", "")
+        else:
+            price = '<span class="na">未取到</span>'
+            chg = '<span class="na">—</span>'
+            state = "行情接口不可达，本条仅列清单与观察理由。"
+        rows.append(
+            f'<tr><td class="nm">{_e(r["name"])}'
+            f'<span class="role">{_e(r.get("role", ""))}</span></td>'
+            f'<td>{price}</td><td>{chg}</td>'
+            f'<td>{_e(state)}<span class="why">{_e(r.get("why", ""))}</span></td></tr>')
+    if not rows:
+        return '<div class="wfoot">观察清单未取到。</div>'
+    return (f'<table class="wtable"><thead><tr><th>标的</th><th>现价</th>'
+            f'<th>24h</th><th>客观状态 / 观察理由</th></tr></thead>'
+            f'<tbody>{"".join(rows)}</tbody></table>')
+
+
+def _assets_section(inv: Dict) -> str:
+    """浏览器版「数字资产」：今日适配建议 + 重点通道 + 速览 + 观察清单 + 防坑。"""
+    a = inv.get("assets")
+    if not a:
+        return _tips(inv.get("crypto", []))
+    head = f'<div class="wadv">{_e(a["advice"])}</div>'
+    cards = f'<div class="wool">{"".join(_wool_card(w) for w in a["focus"])}</div>'
+    glance = "".join(
+        f'<div class="wg"><span class="n">{_e(w["name"])}</span>'
+        f'　<span class="o">{_e(w["one"])}</span></div>' for w in a["glance"])
+    glance = (f'<div class="wglance">{glance}'
+              f'<div class="wg o">常青通道库共 {a["total"]} 项，每日轮换推送。</div></div>')
+    watch = _watch_table(a["watch"])
+    ts = f'　行情时间 {_e(a["watch"].get("ts", ""))}' if a["watch"].get("ok") else ""
+    return (head + cards + glance
+            + f'<div class="wfoot">{_e(a["disclaimer"])}{ts}</div>'
+            + watch
+            + _tips(["防坑：" + s for s in a["safety"]][:4]))
+
+
 def _classic_section(c: Dict) -> str:
     """浏览器版「每日一句经典」。"""
     if not c:
@@ -527,10 +630,6 @@ def render_html(r: Dict) -> str:
                    f'<div class="rels">{rel_cards}</div>')
     body.append(_sec("缘", "人际关系", social_body, soc["score"]))
 
-    btc = inv.get("btc", {})
-    btc_html = (f'<div style="font-size:13.5px;font-weight:700;margin-bottom:6px;color:#3f3a33">'
-                f'{_e(btc.get("headline", ""))}</div>{_tips(btc.get("lines", []))}')
-
     ld = inv.get("lottery_detail") or {}
     lot_html = ""
     if ld.get("skip"):
@@ -563,9 +662,10 @@ def render_html(r: Dict) -> str:
                    f'<div style="font-size:15px;font-weight:600;margin:10px 0;color:#3f3a33">'
                    f'{_e(inv["headline"])}</div>{_tips(inv["notes"])}'
                    f'<div style="font-size:13px;color:var(--gold);font-weight:700;margin:14px 0 6px">'
-                   f'■ BTC 复盘</div>{btc_html}'
+                   f'■ 数字资产（{_e(inv["exchange"].upper())}）· 平台活动薅羊毛</div>'
+                   f'{_assets_section(inv)}'
                    f'<div style="font-size:13px;color:var(--gold);font-weight:700;margin:14px 0 6px">'
-                   f'■ 数字资产（{_e(inv["exchange"].upper())}）</div>{_tips(inv["crypto"])}'
+                   f'■ 仓位与账户纪律</div>{_tips(inv["crypto"])}'
                    f'<div style="font-size:13px;color:var(--gold);font-weight:700;margin:14px 0 6px">'
                    f'■ 彩票娱乐</div>{_tips(inv["lottery"])}{lot_html}')
     body.append(_sec("财", "投资 · 彩票 · 数字资产", invest_body, inv["score"]))
@@ -663,16 +763,31 @@ def render_text(r: Dict) -> str:
         L.append(f"  【{x['who']}】{x['state']}　{x['advice']}")
     L.append("")
     L.append(f"【投资】{r['invest']['headline']}")
-    btc = r["invest"].get("btc", {})
-    if btc.get("ok"):
-        L.append(f"  · BTC 复盘：{btc['headline']}")
-        for t in btc.get("lines", []):
-            L.append(f"      {t}")
-    else:
-        for t in btc.get("lines", [])[:2]:
-            L.append(f"  · {t}")
+    for t in r["invest"]["notes"][:3]:
+        L.append(f"  · {t}")
+    _as = r["invest"].get("assets") or {}
+    if _as:
+        L.append(f"  ■ 数字资产（{r['invest']['exchange'].upper()}）· 平台活动薅羊毛")
+        L.append(f"  · 今日适配：{_as['advice']}")
+        for w in _as["focus"]:
+            L.append(f"  · 【{w['name']}】{w['kind']} {'★' * w['stars']}"
+                     f"{'☆' * (5 - w['stars'])}")
+            for k, v in (("门槛", w["need"]), ("怎么薅", w["how"]),
+                         ("拿到什么", w["gain"]), ("注意", w["risk"])):
+                L.append(f"      {k}：{v}")
+            L.append(f"      官网：{w['link']}")
+        L.append("  · 速览：" + "；".join(
+            f"{w['name']}（{w['one']}）" for w in _as["glance"]))
+        L.append(f"  · 观察清单：{'、'.join(x['name'] for x in _as['watch']['rows'])}")
+        for x in _as["watch"]["rows"]:
+            if x.get("ok"):
+                L.append(f"      {x['name']:<4} {x['price_txt']:>12}  "
+                         f"{x['chg']:+6.2f}%  {x['note']}")
+        L.append("  · 防坑：" + "　".join(_as["safety"][:3]))
+    L.append("  ■ 仓位与账户纪律")
     for t in r["invest"]["crypto"]:
         L.append(f"  · {t}")
+    L.append("  ■ 彩票娱乐")
     ld = r["invest"].get("lottery_detail") or {}
     for t in r["invest"]["lottery"]:
         L.append(f"  · {t}")
