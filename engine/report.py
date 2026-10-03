@@ -509,7 +509,10 @@ def _assets_section(inv: Dict) -> str:
     glance = (f'<div class="wglance">{glance}'
               f'<div class="wg o">常青通道库共 {a["total"]} 项，每日轮换推送。</div></div>')
     watch = _watch_table(a["watch"])
-    ts = f'　行情时间 {_e(a["watch"].get("ts", ""))}' if a["watch"].get("ok") else ""
+    w = a["watch"]
+    ts = (f'　行情时间 {_e(w.get("ts", ""))}'
+          + (f'（数据源 {_e(w.get("source", ""))}）' if w.get("source") else "")
+          ) if w.get("ok") else ""
     return (head + cards + glance
             + f'<div class="wfoot">{_e(a["disclaimer"])}{ts}</div>'
             + watch
@@ -783,6 +786,9 @@ def render_text(r: Dict) -> str:
             if x.get("ok"):
                 L.append(f"      {x['name']:<4} {x['price_txt']:>12}  "
                          f"{x['chg']:+6.2f}%  {x['note']}")
+        if _as["watch"].get("ok"):
+            L.append(f"      行情时间 {_as['watch'].get('ts', '')}"
+                     f"（数据源 {_as['watch'].get('source', '')}）")
         L.append("  · 防坑：" + "　".join(_as["safety"][:3]))
     L.append("  ■ 仓位与账户纪律")
     for t in r["invest"]["crypto"]:
