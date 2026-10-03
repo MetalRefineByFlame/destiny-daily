@@ -754,7 +754,10 @@ def _assets_sec_mail(inv: Dict) -> str:
         f'{_e(w["one"])}</div>' for w in a["glance"])
     glance += (f'<div style="{_f(11.3, INK3, "normal", 1.6)}margin-top:6px">'
                f'常青通道库共 {a["total"]} 项，每日轮换推送。</div>')
-    ts = f'　行情时间 {_e(a["watch"].get("ts", ""))}' if a["watch"].get("ok") else ""
+    _wk = a["watch"]
+    ts = (f'　行情时间 {_e(_wk.get("ts", ""))}'
+          + (f'（数据源 {_e(_wk.get("source", ""))}）' if _wk.get("source") else "")
+          ) if _wk.get("ok") else ""
     return (adv + cards
             + f'<div style="margin-top:12px">{glance}</div>'
             + _note(a["disclaimer"] + ts)
