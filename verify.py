@@ -298,7 +298,7 @@ for _tag in ("table", "tr", "td", "div"):
 _MARKERS = {
     "本命提要": False, "每日一卦": False, "五门评分": False, "日常生活": False,
     "健康": False, "出行方位": False, "人际关系": False, "投资": False,
-    "传统文化学习": False, "今日打卡清单": False,
+    "传统文化学习": False, "每日一句经典": False,
 }
 _missing = [k for k in _MARKERS if k not in _mail_html]
 check("邮件版栏目齐全", _missing, [])
@@ -317,7 +317,7 @@ check("邮件版结构完整收口", _mail_html.strip().endswith("</html>"), Tru
 # 内容等价性：邮件版不应比文本版少信息（文本里的每个小节标题邮箱里都该有）
 _txt = _rtxt(_rp)
 _CORE = ["【五门评分】", "【日常生活】", "【健康】", "【出行】", "【人际】",
-         "【投资】", "【学习】", "【今日打卡】"]
+         "【投资】", "【学习】", "【每日一句经典 ·"]
 check("文本版小节完整", [c for c in _CORE if c not in _txt], [])
 
 # --- MIME 结构：正文必须解码一次即还原（2026-09-29 双重编码事故的防回归） ---
@@ -508,6 +508,12 @@ print("11) 数字资产（wool：平台活动薅羊毛 + 观察清单）")
 print("-" * 78)
 
 from engine import wool as _wo  # noqa: E402
+
+# --- 打卡清单必须彻底消失（2026-10-03 江公子要求移除）---
+check("报告不再有 checklist 字段", "checklist" in _rp, False)
+check("三版均无「打卡清单 / 今日打卡」字样",
+      [n for n, s in (("文本", _txt), ("浏览器", _rhtml), ("邮件", _mail_html))
+       if ("打卡清单" in s or "今日打卡" in s)], [])
 
 # --- BTC 复盘必须彻底消失 ---
 check("报告不再有 btc 字段", "btc" in _rp["invest"], False)
