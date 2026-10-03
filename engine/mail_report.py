@@ -597,6 +597,62 @@ def _checks(r: Dict) -> str:
 # ---------------------------------------------------------------- 每日一句经典
 
 
+def _lesson_mail(c: Dict) -> str:
+    """邮件版「今日一课」卡片。
+
+    链接按钮用「table > td bgcolor > a」的写法（bulletproof button）：
+    直接给 <a> 加 background，Outlook 会丢掉底色只留蓝字。
+    """
+    if not c:
+        return ""
+    top = (
+        f'<table width="100%" cellpadding="0" cellspacing="0" border="0" '
+        f'bgcolor="{SOFT2}" style="background:{SOFT2}"><tr>'
+        f'<td style="padding:8px 13px;font-size:12.4px;color:{GOLD};font-weight:700;'
+        f'font-family:{FONT}">{_e(c["track"])}</td>'
+        f'<td align="right" style="padding:8px 13px;font-size:11.2px;color:{INK3};'
+        f'font-family:{FONT}">第 {c["no"]}/{c["total"]} 节　'
+        f'总 {c["global_no"]}/{c["global_total"]}</td>'
+        f'</tr></table>')
+
+    parts = [top, f'<div style="{_f(15.0, INK, "700", 1.65)}margin:11px 0 2px">'
+                  f'{_e(c["title"])}</div>']
+    if c.get("points"):
+        parts.append(_tips(c["points"]))
+    if c.get("quote"):
+        parts.append(
+            f'<table width="100%" cellpadding="0" cellspacing="0" border="0" '
+            f'bgcolor="{SOFT}" style="background:{SOFT};margin-top:9px"><tr>'
+            f'<td width="3" bgcolor="{QING}" style="background:{QING};'
+            f'font-size:1px;line-height:1px">&nbsp;</td>'
+            f'<td style="padding:9px 13px;font-size:13.2px;color:#4a5a42;'
+            f'line-height:1.85;font-family:{FONT}">{_e(c["quote"])}</td>'
+            f'</tr></table>')
+    if c.get("practice"):
+        parts.append(
+            f'<table width="100%" cellpadding="0" cellspacing="0" border="0" '
+            f'bgcolor="#f6f9f4" style="background:#f6f9f4;margin-top:9px"><tr>'
+            f'<td style="padding:10px 13px;font-size:13.2px;color:#4a5a42;'
+            f'line-height:1.8;font-family:{FONT}">'
+            f'<span style="font-weight:700">今日练习　</span>{_e(c["practice"])}</td>'
+            f'</tr></table>')
+
+    links = c.get("links") or []
+    if links:
+        cells = "".join(
+            f'<td style="padding:0 8px 0 0">'
+            f'<table cellpadding="0" cellspacing="0" border="0"><tr>'
+            f'<td bgcolor="{QING}" style="background:{QING};border-radius:16px;'
+            f'padding:6px 14px">'
+            f'<a href="{_e(l["url"])}" target="_blank" style="color:#ffffff;'
+            f'text-decoration:none;font-size:12.4px;font-family:{FONT}">'
+            f'{_e(l["label"])} →</a></td></tr></table></td>'
+            for l in links)
+        parts.append(f'<table cellpadding="0" cellspacing="0" border="0" '
+                     f'style="margin-top:11px"><tr>{cells}</tr></table>')
+    return "".join(parts)
+
+
 def _classic_sec(r: Dict) -> str:
     """邮件版「每日一句经典」。
 
@@ -711,8 +767,9 @@ def render_mail_html(r: Dict) -> str:
         + _lottery(inv))
     body.append(_sec("财", "投资 · 彩票 · 数字资产", invest, inv["score"]))
 
-    body.append(_sec("学", "传统文化学习",
-                     _lead(st["headline"]) + _tips(st["plan"]), st["score"]))
+    body.append(_sec("学", "传统文化学习 · 今日一课",
+                     _lead(st["headline"]) + _lesson_mail(st.get("lesson"))
+                     + _tips(st["plan"]), st["score"]))
     if r.get("classic"):
         body.append(_classic_sec(r))
     body.append(_sec("记", "今日打卡清单", _checks(r)))
