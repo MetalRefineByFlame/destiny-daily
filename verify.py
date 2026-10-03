@@ -272,8 +272,18 @@ check("邮件版无客户端禁用CSS", _hit, [])
 
 check("邮件版无<style>块(会被剥离)", "<style" in _mail_html, False)
 
+# 禁的是「外部资源」（图片/字体/JS/CSS），不是超链接——
+# 学习栏要给 B 站讲解链接，那是正文的一部分，属于正常 <a href>
 _ext = re.findall(r'(?:src|href)\s*=\s*["\']([^"\']+)', _mail_html)
-check("邮件版无外部图片/字体/JS", [u for u in _ext if not u.startswith("#")], [])
+_RES = re.compile(r'\.(js|css|png|jpe?g|gif|svg|webp|woff2?|ttf|otf|eot|ico)'
+                  r'(\?|$)', re.I)
+check("邮件版无外部图片/字体/JS",
+      [u for u in _ext if not u.startswith("#") and _RES.search(u)], [])
+check("邮件版超链接均为 https",
+      [u for u in _ext if not u.startswith("#")
+       and not u.startswith("https://")], [])
+check("学习栏带B站讲解链接",
+      any("search.bilibili.com" in u for u in _ext), True)
 
 check("邮件版宽600px", 'max-width:600px' in _mail_html, True)
 
@@ -422,6 +432,73 @@ check("邮件版带经典栏", "每日一句经典" in _mail_html, True)
 check("邮件版带原文", _rc_q in _mail_html, True)
 check("邮件版无链接残留(资讯已移除)",
       "utm_" in _mail_html or "抓取于" in _mail_html, False)
+
+# ---------------------------------------------------------------- 10) 系统学习路线
+print()
+print("-" * 78)
+print("10) 传统文化系统课（curriculum）")
+print("-" * 78)
+
+from engine import curriculum as _cu  # noqa: E402
+
+_trs = _cu.all_tracks()
+_n = _cu.total_lessons(_trs)
+check("课程轨道数量", len(_trs) >= 12, True)
+check("总课时够学半年", _n >= 180, True)
+check("每条轨道有课时", [t["name"] for t in _trs if not (t.get("lessons") or [])], [])
+
+# 课时字段完整性：缺了要点或练习，推到邮箱里就是空卡片
+_bad = []
+for _t in _trs:
+    for _l in (_t.get("lessons") or []):
+        if not str(_l.get("t", "")).strip():
+            _bad.append(f'{_t["name"]}: 缺标题')
+        if not (_l.get("p") or []):
+            _bad.append(f'{_t["name"]}/{_l.get("t")}: 缺要点')
+        if not str(_l.get("a", "")).strip():
+            _bad.append(f'{_t["name"]}/{_l.get("t")}: 缺练习')
+check("每课都有标题/要点/练习", _bad[:6], [])
+check("课时标题无重复",
+      len({str(_l["t"]) for _t in _trs for _l in (_t["lessons"] or [])}) == _n, True)
+
+# 推进：相邻两天必须是不同的课，且不能跳节
+_d0 = datetime(2026, 10, 3)
+_seq = [_cu.lesson_for(_d0 + _td(days=i), _trs) for i in range(40)]
+check("相邻两天不重复",
+      [i for i in range(1, 40)
+       if _seq[i]["title"] == _seq[i - 1]["title"]], [])
+check("逐日推进不跳节",
+      [i for i in range(1, 40)
+       if _seq[i]["global_no"] - _seq[i - 1]["global_no"] != 1], [])
+check("同一天结果确定",
+      _cu.lesson_for(_d0, _trs)["title"], _cu.lesson_for(_d0, _trs)["title"])
+# 从起算日（2026-09-29 = 第1节）走满一轮，应回到第 1 节
+check("走完一轮回到第1节",
+      _cu.lesson_for(datetime(2026, 9, 29) + _td(days=_n), _trs)["global_no"], 1)
+
+# 链接：每课都要能点开学
+_nolink = [s["title"] for s in _seq if not s.get("links")]
+check("每课都有链接", _nolink, [])
+check("链接均为 https",
+      [l["url"] for s in _seq for l in s["links"]
+       if not l["url"].startswith("https://")], [])
+check("每课都有B站讲解入口",
+      [s["title"] for s in _seq
+       if not any("bilibili" in l["url"] for l in s["links"])], [])
+# 搜索关键词必须 URL 编码过，否则中文在部分客户端会变成乱码链接
+check("搜索词已URL编码",
+      [l["url"] for s in _seq for l in s["links"]
+       if "bilibili" in l["url"] and "%" not in l["url"]], [])
+
+# 三版渲染都带今日一课
+_lsn = _rp["study"].get("lesson")
+check("报告已带 lesson 字段", bool(_lsn), True)
+check("文本版带今日一课", "今日一课" in _rtxt(_rp), True)
+check("浏览器版带今日一课", "今日一课" in _rhtml and _e(_lsn["title"])[:10] in _rhtml, True)
+check("邮件版带今日一课", _e(_lsn["title"])[:10] in _mail_html, True)
+check("邮件版带链接", "search.bilibili.com" in _mail_html, True)
+# 旧版那句写死的「轮换专题」不该再出现
+check("旧版轮换文案已清除", "（轮换专题）" in _rhtml or "（轮换专题）" in _mail_html, False)
 
 print()
 print("=" * 78)
