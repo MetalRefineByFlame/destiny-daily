@@ -574,6 +574,32 @@ check("未取到时无价格字段", [r["name"] for r in _wl["rows"]
 check("观察清单含 BNB（与羊毛门槛相关）",
       any(r["name"] == "BNB" for r in _wl["rows"]), True)
 
+# --- 行情层：多源 fallback + 熔断 ---
+from engine import market as _mk  # noqa: E402
+
+check("价格源不少于3个", len(_mk.PRICE_SRC) >= 3, True)
+check("日线源不少于3个", len(_mk.SERIES_SRC) >= 3, True)
+check("CoinGecko 覆盖全部默认标的",
+      [s for s, *_ in _wo.WATCHLIST if s not in _mk.GECKO_IDS], [])
+# Coinbase 无 BNB 现货：这是已知缺口，必须有别的源兜住，不能整栏失效
+check("BNB 至少有一个非 Coinbase 源",
+      "BNBUSDT" in _mk.GECKO_IDS or "BNBUSDT" in _mk.COINBASE_PAIRS, True)
+_mk.reset_breaker()
+check("初始未熔断", _mk._down("binance"), False)
+_mk._mark_down("binance")
+check("熔断生效", _mk._down("binance"), True)
+_mk.reset_breaker()
+check("熔断可复位", _mk._down("binance"), False)
+# 熔断后不应再发起网络请求（直接抛错，避免 N×M×重试 的空等）
+_raise = False
+_mk._mark_down("__probe__")
+try:
+    _mk._try("__probe__", lambda: 1 / 0)     # 已熔断 → 必须立刻抛，不发起请求
+except Exception:                            # noqa: BLE001
+    _raise = True
+check("熔断源直接抛错不联网", _raise, True)
+_mk.reset_breaker()
+
 # --- 三版渲染 ---
 _as = _rp["invest"].get("assets") or {}
 check("报告已带 assets 字段", bool(_as), True)
