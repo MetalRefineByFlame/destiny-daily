@@ -653,6 +653,117 @@ def _lesson_mail(c: Dict) -> str:
     return "".join(parts)
 
 
+def _wool_card_mail(w: Dict) -> str:
+    """一条羊毛通道卡片（table 布局，Outlook 安全）。"""
+    warn = w.get("stars", 3) <= 1 or "高风险" in w.get("kind", "")
+    bar = ZHU if warn else QING
+    rows = ""
+    for k, v, is_risk in (("门槛", w["need"], False), ("怎么薅", w["how"], False),
+                          ("拿到什么", w["gain"], False), ("注意", w["risk"], True)):
+        vc = "#b0402f" if (is_risk and warn) else ("#a4532f" if is_risk else INK)
+        rows += (
+            f'<tr><td width="54" valign="top" style="padding:3px 0;'
+            f'{_f(12.2, INK3, "600", 1.65)}">{_e(k)}</td>'
+            f'<td valign="top" style="padding:3px 0;{_f(12.4, vc, "normal", 1.68)}">'
+            f'{_e(v)}</td></tr>')
+    head = (
+        f'<table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>'
+        f'<td valign="middle" style="{_f(13.4, INK, "700", 1.5)}">'
+        f'{_e(w["name"])}</td>'
+        f'<td width="74" align="right" valign="middle" '
+        f'style="{_f(11, "#b9963f", "normal", 1.5)}white-space:nowrap">'
+        f'{"★" * w["stars"]}{"☆" * (5 - w["stars"])}</td></tr></table>')
+    badge = (
+        f'<table cellpadding="0" cellspacing="0" border="0" bgcolor="{bar}" '
+        f'style="background:{bar};border-radius:3px;border-collapse:separate">'
+        f'<tr><td style="padding:1px 7px;'
+        f'{_f(10.5, "#ffffff", "normal", 1.4)}">{_e(w["kind"])}</td></tr></table>')
+    btn = (
+        f'<table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="{bar}" '
+        f'style="background:{bar};border-radius:7px;border-collapse:separate;margin-top:9px">'
+        f'<tr><td align="center" style="padding:7px 10px">'
+        f'<a href="{_e(w["link"])}" target="_blank" '
+        f'style="{_f(12.4, "#ffffff", "700", 1.4)}text-decoration:none;display:block">'
+        f'前往官网查看当期活动 &gt;</a></td></tr></table>')
+    return (
+        f'<table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="{SOFT}" '
+        f'style="background:{SOFT};border:1px solid {LINE};border-left:3px solid {bar};'
+        f'border-radius:9px;border-collapse:separate;margin-top:9px">'
+        f'<tr><td style="padding:11px 13px">{head}'
+        f'<div style="margin-top:5px">{badge}</div>'
+        f'<table width="100%" cellpadding="0" cellspacing="0" border="0" '
+        f'style="margin-top:7px">{rows}</table>{btn}</td></tr></table>')
+
+
+def _watch_mail(watch: Dict) -> str:
+    """观察清单表格。行情未取到时仍给出标的与观察理由。"""
+    trs = ""
+    for r in watch.get("rows", []):
+        if r.get("ok"):
+            cc = "#b03030" if r["chg"] >= 0 else "#1f7a52"     # 涨红跌绿
+            p, c, st = r["price_txt"], f'{r["chg"]:+.2f}%', r.get("note", "")
+        else:
+            cc, p, c = INK3, "未取到", "—"
+            st = "行情接口不可达，本条仅列清单与观察理由。"
+        trs += (
+            f'<tr>'
+            f'<td width="86" valign="top" style="padding:6px 5px;'
+            f'border-bottom:1px dotted {LINE};{_f(12.6, INK, "700", 1.55)}">'
+            f'{_e(r["name"])}'
+            f'<span style="{_f(10.8, INK3, "normal", 1.5)}">'
+            f'<br>{_e(r.get("role", ""))}</span></td>'
+            f'<td width="86" align="right" valign="top" style="padding:6px 5px;'
+            f'border-bottom:1px dotted {LINE};{_f(12.4, INK, "600", 1.55)}'
+            f'white-space:nowrap">{_e(p)}</td>'
+            f'<td width="62" align="right" valign="top" style="padding:6px 5px;'
+            f'border-bottom:1px dotted {LINE};{_f(12.2, cc, "600", 1.55)}'
+            f'white-space:nowrap">{_e(c)}</td>'
+            f'<td valign="top" style="padding:6px 5px;'
+            f'border-bottom:1px dotted {LINE};{_f(11.8, INK2, "normal", 1.6)}">'
+            f'{_e(st)}<span style="{_f(11, INK3, "normal", 1.6)}">'
+            f'<br>{_e(r.get("why", ""))}</span></td></tr>')
+    if not trs:
+        return _note("观察清单未取到。")
+    return (
+        f'<table width="100%" cellpadding="0" cellspacing="0" border="0" '
+        f'bgcolor="{SOFT}" style="background:{SOFT};border:1px solid {LINE};'
+        f'border-radius:9px;border-collapse:separate">'
+        f'<tr style="background:{SOFT2}">'
+        f'<th align="left" style="padding:5px;{_f(11.2, INK3, "600", 1.5)}">标的</th>'
+        f'<th align="right" style="padding:5px;{_f(11.2, INK3, "600", 1.5)}">现价</th>'
+        f'<th align="right" style="padding:5px;{_f(11.2, INK3, "600", 1.5)}">24h</th>'
+        f'<th align="left" style="padding:5px;{_f(11.2, INK3, "600", 1.5)}">'
+        f'客观状态 / 观察理由</th></tr>{trs}</table>')
+
+
+def _assets_sec_mail(inv: Dict) -> str:
+    """邮件版「数字资产」：今日适配 + 重点通道 + 速览 + 观察清单 + 防坑。"""
+    a = inv.get("assets")
+    if not a:
+        return _tips(inv.get("crypto", []), 13.2)
+    adv = (
+        f'<table width="100%" cellpadding="0" cellspacing="0" border="0" '
+        f'bgcolor="#f3f8f8" style="background:#f3f8f8;border:1px dashed #cbe0e0;'
+        f'border-radius:9px;border-collapse:separate">'
+        f'<tr><td style="padding:9px 12px;{_f(12.9, INK, "normal", 1.7)}">'
+        f'{_e(a["advice"])}</td></tr></table>')
+    cards = "".join(_wool_card_mail(w) for w in a["focus"])
+    glance = "".join(
+        f'<div style="{_f(12.3, INK2, "normal", 1.62)}margin-top:5px">'
+        f'<b style="color:{INK};font-weight:700">{_e(w["name"])}</b>　'
+        f'{_e(w["one"])}</div>' for w in a["glance"])
+    glance += (f'<div style="{_f(11.3, INK3, "normal", 1.6)}margin-top:6px">'
+               f'常青通道库共 {a["total"]} 项，每日轮换推送。</div>')
+    ts = f'　行情时间 {_e(a["watch"].get("ts", ""))}' if a["watch"].get("ok") else ""
+    return (adv + cards
+            + f'<div style="margin-top:12px">{glance}</div>'
+            + _note(a["disclaimer"] + ts)
+            + _sub("■ 观察清单（只列事实，不做推荐）", GOLD)
+            + _watch_mail(a["watch"])
+            + _sub("■ 防坑提醒", GOLD)
+            + _tips(a["safety"][:4], 12.4))
+
+
 def _classic_sec(r: Dict) -> str:
     """邮件版「每日一句经典」。
 
@@ -746,7 +857,6 @@ def render_mail_html(r: Dict) -> str:
               + _rel_cards(soc))
     body.append(_sec("缘", "人际关系", social, soc["score"]))
 
-    btc = inv.get("btc", {})
     invest = (
         f'<table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#fdf3f1" '
         f'style="background:#fdf3f1;border:1px solid #e8cfc9;border-left:4px solid {ZHU};'
@@ -757,10 +867,9 @@ def render_mail_html(r: Dict) -> str:
         + f'<div style="{_f(14.5, "#3f3a33", "600", 1.7)}margin:12px 0 10px">'
         + _e(inv["headline"]) + "</div>"
         + _tips(inv["notes"])
-        + _sub("■ BTC 复盘")
-        + f'<div style="{_f(13.2, "#3f3a33", "700", 1.6)}margin-bottom:5px">'
-        + _e(btc.get("headline", "")) + "</div>" + _tips(btc.get("lines", []), 13.2)
-        + _sub(f'■ 数字资产（{inv["exchange"].upper()}）')
+        + _sub(f'■ 数字资产（{inv["exchange"].upper()}）· 平台活动薅羊毛')
+        + _assets_sec_mail(inv)
+        + _sub("■ 仓位与账户纪律")
         + _tips(inv["crypto"], 13.2)
         + _sub("■ 彩票娱乐")
         + _tips(inv["lottery"], 13.2)
