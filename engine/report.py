@@ -106,6 +106,10 @@ body{margin:0;background:var(--paper);color:var(--ink);
 .lot.skip{background:#f7f8f6;border-color:#c9cfc6;border-style:dashed}
 .lot.skip .lt{color:#6b7280}
 .lot.skip .lv{color:#8a8f86}
+/* 回溯核对：开奖号用中性灰球，中奖条目描红边 */
+.ball.d{background:#7d8a86}
+.lot.win{border-color:#c0453b;background:#fff6f4}
+.lot.win .lv{color:#c0453b}
 
 /* ---------- 五门评分 ---------- */
 .five{display:grid;gap:10px}
@@ -652,6 +656,50 @@ def render_html(r: Dict) -> str:
                          f'当日其他开奖彩种（今日不碰）：'
                          f'{"、".join(_e(x) for x in others)}</div>')
 
+    # ---- 回溯核对：往期已推送号码的中奖结果 ----
+    rv_html = ""
+    rv = inv.get("lottery_review") or {}
+    if rv.get("ok"):
+        rows = []
+        for it in rv["items"]:
+            res = it["result"]
+            win = bool(res and res["win"])
+            front = "".join(f'<span class="ball{" b" if win else ""}">{n}</span>'
+                            for n in it["front"])
+            back = ""
+            if it.get("back"):
+                back = ('<span class="sep">+</span>'
+                        + "".join(f'<span class="ball b">{n}</span>' for n in it["back"]))
+            issue = (f' 第 {_e(res["issue"])} 期' if res else "")
+            tag = "（复算补录）" if it.get("recomputed") else ""
+            verdict = ("开奖结果尚未公布" if not res else
+                       (f'中 {_e(res["level"])}　{_e(res["prize_note"])}' if win
+                        else f'未中奖（命中 {_e(res["hit_txt"])}）'))
+            draw = ""
+            if res:
+                draw = "".join(f'<span class="ball d">{n}</span>' for n in res["draw_front"])
+                if res.get("draw_back"):
+                    draw += ('<span class="sep">+</span>'
+                             + "".join(f'<span class="ball d">{n}</span>'
+                                       for n in res["draw_back"]))
+                draw = (f'<div class="ln" style="margin:8px 0 2px">开奖</div>'
+                        f'<div class="balls">{draw}</div>')
+            rows.append(
+                f'<div class="lot{" win" if win else ""}">'
+                f'<div class="lt">{_e(it["date"])}（{_e(it["week"])}）'
+                f'{_e(it["game"])}{tag}{issue}'
+                f'<span class="lv" style="margin-left:8px">{_e(verdict)}</span></div>'
+                f'<div class="ln" style="margin:6px 0 2px">推荐</div>'
+                f'<div class="balls">{front}{back}</div>{draw}</div>')
+        rv_html = (f'<div style="font-size:13px;color:var(--gold);font-weight:700;'
+                   f'margin:14px 0 6px">■ 往期推荐核对（官方开奖数据）</div>'
+                   + "".join(rows)
+                   + f'<div style="font-size:12px;color:var(--ink2);margin-top:6px">'
+                     f'奖金以官方公告为准；浮动奖不在此估算金额。'
+                     f'「复算补录」= 台账缺失时按当日盘面确定性重算，'
+                     f'号码与当日实际推送完全一致。</div>')
+    # 无号可核时整段不渲染：当日没推荐购彩，早报里就不出现任何相关信息
+
     invest_body = (f'<div class="risk"><b>⚠ 风险提示</b>　{_e(inv["risk_banner"])}</div>'
                    f'<div style="font-size:15px;font-weight:600;margin:10px 0;color:#3f3a33">'
                    f'{_e(inv["headline"])}</div>{_tips(inv["notes"])}'
@@ -661,7 +709,7 @@ def render_html(r: Dict) -> str:
                    f'<div style="font-size:13px;color:var(--gold);font-weight:700;margin:14px 0 6px">'
                    f'■ 仓位与账户纪律</div>{_tips(inv["crypto"])}'
                    f'<div style="font-size:13px;color:var(--gold);font-weight:700;margin:14px 0 6px">'
-                   f'■ 彩票娱乐</div>{_tips(inv["lottery"])}{lot_html}')
+                   f'■ 彩票娱乐</div>{_tips(inv["lottery"])}{lot_html}{rv_html}')
     body.append(_sec("财", "投资 · 彩票 · 数字资产", invest_body, inv["score"]))
 
     body.append(_sec("学", "传统文化学习 · 今日一课",
@@ -797,6 +845,30 @@ def render_text(r: Dict) -> str:
         others = [g for g in ld.get("open_games", []) if g != ld.get("chosen")]
         if others:
             L.append(f"      当日其他开奖彩种（今日不碰）：{'、'.join(others)}")
+
+    # ---- 回溯核对：最近一次已推送号码的中奖结果 ----
+    rv = r["invest"].get("lottery_review") or {}
+    if rv.get("ok"):
+        L.append("  ■ 往期推荐核对（官方开奖数据）")
+        for it in rv["items"]:
+            res = it["result"]
+            tag = "（复算补录）" if it.get("recomputed") else ""
+            L.append(f"  · {it['date']}（{it['week']}）{it['game']}{tag}"
+                     + (f" 第 {res['issue']} 期" if res else ""))
+            L.append(f"      推荐：{it['pick_txt']}")
+            if res:
+                L.append(f"      开奖：{res['draw_txt']}")
+                verdict = (f"中 {res['level']}　{res['prize_note']}" if res["win"]
+                           else f"未中奖（命中 {res['hit_txt']}）")
+                L.append(f"      结果：{verdict}")
+            else:
+                L.append("      结果：开奖结果尚未公布（以官方公告为准）")
+        L.append("  · 奖金以官方公告为准；浮动奖不在此估算金额。")
+        if any(x.get("recomputed") for x in rv["items"]):
+            L.append("  · 注：「复算补录」= 台账缺失时按当日盘面确定性重算，"
+                     "号码与当日实际推送完全一致。")
+    # 无号可核时整段不渲染：当日没推荐购彩，早报里就不出现任何相关信息
+
     L.append(f"  {r['invest']['risk_banner']}")
     L.append("")
     L.append(f"【学习】{r['study']['headline']}")
