@@ -629,6 +629,112 @@ check("观察清单无禁用 CSS",
       [b for b in ("display:flex", "display: grid", "var(--",
                    "linear-gradient") if b in _wm], [])
 
+# --- 彩票回溯核对（对奖规则 + 台账记账，全程离线） ---
+from engine import lottery_result as _lr          # noqa: E402
+
+_SSQ_DRAW = {"front": [1, 2, 3, 4, 5, 6], "back": [7]}
+check("双色球 6+1 判一等奖",
+      _lr.settle("双色球", [1, 2, 3, 4, 5, 6], [7], _SSQ_DRAW)["level"], "一等奖")
+check("双色球 5+1 判三等奖",
+      _lr.settle("双色球", [1, 2, 3, 4, 5, 9], [7], _SSQ_DRAW)["level"], "三等奖")
+check("双色球 2+1 判六等奖",
+      _lr.settle("双色球", [1, 2, 31, 32, 33, 34], [7], _SSQ_DRAW)["level"], "六等奖")
+check("双色球 2+0 判未中奖",
+      _lr.settle("双色球", [1, 2, 31, 32, 33, 34], [9], _SSQ_DRAW)["level"], "未中奖")
+_DLT_DRAW = {"front": [1, 2, 3, 4, 5], "back": [6, 7]}
+check("大乐透 5+2 判一等奖",
+      _lr.settle("大乐透", [1, 2, 3, 4, 5], [6, 7], _DLT_DRAW)["level"], "一等奖")
+check("大乐透 3+0 判八等奖",
+      _lr.settle("大乐透", [1, 2, 3, 32, 33], [11, 12], _DLT_DRAW)["level"], "八等奖")
+check("大乐透 2+0 判九等奖",
+      _lr.settle("大乐透", [1, 2, 31, 32, 33], [11, 12], _DLT_DRAW)["level"], "九等奖")
+_KL8_DRAW = {"front": list(range(1, 21)), "back": []}
+check("快乐8 中10 判一等奖",
+      _lr.settle("快乐8", list(range(1, 11)), [], _KL8_DRAW)["level"], "一等奖")
+check("快乐8 中6 判五等奖",
+      _lr.settle("快乐8", list(range(1, 7)), [], _KL8_DRAW)["level"], "五等奖")
+check("快乐8 中0 判未中奖",
+      _lr.settle("快乐8", list(range(31, 41)), [], _KL8_DRAW)["level"], "未中奖")
+
+# 台账：用临时文件，避免污染真实 data/lottery_picks.json
+_real_log = _lr.LOG_PATH
+_TODAY = datetime(2026, 9, 29, 8, 0)
+_tmp_log = os.path.join(_tmpf.gettempdir(), "_destiny_picks_verify.json")
+try:
+    _lr.LOG_PATH = _tmp_log
+    if os.path.exists(_tmp_log):
+        os.remove(_tmp_log)
+    _lr.record_from_block(_TODAY, {"skip": True, "score": 40.0, "picks": []})
+    check("停买日不记账", os.path.exists(_tmp_log), False)
+    _lr.record_from_block(_TODAY, {"skip": False, "score": 61.0,
+                                   "picks": [{"game": "双色球",
+                                              "front": [1, 2, 3, 4, 5, 6],
+                                              "back": [7]}]})
+    check("推荐日已记账", os.path.exists(_tmp_log), True)
+    _rec = json.load(open(_tmp_log, encoding="utf-8"))
+    check("台账记录号码完整", _rec[_TODAY.strftime("%Y-%m-%d")]["front"],
+          [1, 2, 3, 4, 5, 6])
+    # 离线回溯：保留条目但不抓开奖（结果留空，标注「待公布」）
+    _rv = _lr.review(_TODAY + timedelta(days=1), offline=True)
+    check("离线回溯不报错", isinstance(_rv, dict) and "items" in _rv, True)
+    check("离线回溯不出开奖结果", [x for x in _rv["items"] if x.get("result")], [])
+    # 台账缺失时按当日盘面确定性复算，结果必须与当日实际推送一致
+    # （10-16 实推快乐8 07 12 27 36 49 52 62 63 66 70；profile 变更时需同步更新此期望）
+    _rc = _lr._recompute_pick(datetime(2026, 10, 16, 8, 0))
+    check("台账缺失可复算出号码", bool(_rc and _rc.get("front")), True)
+    check("复算号码与当日实推一致", _rc.get("front") if _rc else None,
+          [7, 12, 27, 36, 49, 52, 62, 63, 66, 70])
+finally:
+    _lr.LOG_PATH = _real_log
+    if os.path.exists(_tmp_log):
+        os.remove(_tmp_log)
+
+# ---- 行为规范：有推荐→次日早报必带核对；无推荐→早报无任何相关信息 ----
+_orig_review, _orig_record = _lr.review, _lr.record_from_block
+_tmp_log2 = os.path.join(_tmpf.gettempdir(), "_destiny_picks_verify2.json")
+try:
+    # 场景A：回溯窗口内均建议停买（无号可核）→ 三版都不出现「往期推荐核对」
+    _lr.review = lambda *a, **k: {"ok": False, "items": [],
+                                  "note": "（最近 7 天均建议停买，无号码可核对）"}
+    _lr.record_from_block = lambda *a, **k: None
+    _rpA = _gen(datetime(2026, 9, 30, 8, 0), offline=True)
+    check("无推荐·文本版无核对段", "往期推荐核对" in _rtxt(_rpA), False)
+    check("无推荐·浏览器版无核对段", "往期推荐核对" in _rhtm(_rpA), False)
+    check("无推荐·邮件版无核对段", "往期推荐核对" in _rmail(_rpA), False)
+
+    # 场景B：昨日有推荐且开奖已公布 → 当日早报必须带昨日号码与中奖结果
+    _lr.review, _lr.record_from_block = _orig_review, _orig_record
+    _draw = {"date": "2026-09-28", "issue": "2026098",
+             "front": [1, 2, 3, 11, 12, 13, 21, 22, 23, 31,
+                       32, 33, 41, 42, 43, 51, 52, 53, 61, 62],
+             "back": []}
+    _lr.LOG_PATH = _tmp_log2
+    with open(_tmp_log2, "w", encoding="utf-8") as _f:
+        json.dump({"2026-09-27": {
+            "game": "快乐8", "front": list(range(21, 31)), "back": [],
+            "score": 60.0,
+            "result": _lr.settle("快乐8", list(range(21, 31)), [], _draw)},
+            "2026-09-28": {
+            "game": "快乐8", "front": list(range(1, 11)), "back": [],
+            "score": 62.0,
+            "result": _lr.settle("快乐8", list(range(1, 11)), [], _draw)}},
+            _f, ensure_ascii=False)
+    _rpB = _gen(datetime(2026, 9, 29, 8, 0), offline=True)
+    _tB = _rtxt(_rpB)
+    check("有推荐·次日文本版带核对段", "往期推荐核对" in _tB, True)
+    check("有推荐·核对段含昨日号码",
+          "01 02 03 04 05 06 07 08 09 10" in _tB, True)
+    check("有推荐·核对段含命中结果", "未中奖（命中 3）" in _tB, True)
+    check("只展示最近一天·前日号码不出现",
+          "21 22 23 24 25 26 27 28 29 30" in _tB, False)
+    check("有推荐·次日浏览器版带核对段", "往期推荐核对" in _rhtm(_rpB), True)
+    check("有推荐·次日邮件版带核对段", "往期推荐核对" in _rmail(_rpB), True)
+finally:
+    _lr.review, _lr.record_from_block = _orig_review, _orig_record
+    _lr.LOG_PATH = _real_log
+    if os.path.exists(_tmp_log2):
+        os.remove(_tmp_log2)
+
 print()
 print("=" * 78)
 print(f"结果：通过 {PASS} 项，失败 {FAIL} 项")
