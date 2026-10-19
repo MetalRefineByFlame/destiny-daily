@@ -32,7 +32,7 @@ from .base import (
     solar_term_datetime, GAN_YANG,
 )
 from . import (bazi, qimen, liuren, yijing, market, lottery, zhouyi,
-               classic, curriculum, wool)
+               classic, curriculum, wool, lottery_result)
 from .lunar import lunar_info
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -829,6 +829,14 @@ def _invest(ctx) -> Dict:
             f"只买 {g} 一注，超出即停。",
         ]
 
+    # ---- 彩票回溯核对：今日推荐记账 + 核对最近一次已推送号码的开奖结果 ----
+    try:
+        lottery_result.record_from_block(ctx["target"], lotto)
+        lotto_review = lottery_result.review(
+            ctx["target"], offline=bool(ctx.get("offline")))
+    except Exception:      # noqa: BLE001  核对失败不得影响主报告
+        lotto_review = {"ok": False, "items": [], "note": ""}
+
     return {
         "score": score,
         "headline": f"财气指数 {score:.0f}｜{action[0]}",
@@ -837,6 +845,7 @@ def _invest(ctx) -> Dict:
         "assets": assets,
         "lottery": lottery_lines,
         "lottery_detail": lotto,
+        "lottery_review": lotto_review,
         "lottery_score": lotto_score,
         "exchange": inv.get("crypto_exchange", "binance"),
         "risk_banner": "⚠ 术数仅为文化视角参考，不构成投资建议。"
