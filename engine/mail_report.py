@@ -498,12 +498,61 @@ def _yi_ji(g: Dict) -> str:
             + "</tr></table>")
 
 
-def _ball(n, blue: bool = False) -> str:
-    bg = "#2f5d8a" if blue else ZHU
+def _ball(n, blue: bool = False, gray: bool = False) -> str:
+    bg = "#2f5d8a" if blue else ("#7d8a86" if gray else ZHU)
     return (f'<span style="{_f(12.5, "#fff", "700", 1)}display:inline-block;'
             f'width:27px;height:27px;line-height:27px;text-align:center;'
             f'background:{bg};border-radius:50%;margin:0 3px 5px 0">'
             f'{n:02d}</span>')
+
+
+def _lottery_review(inv: Dict) -> str:
+    """往期已推送号码的中奖核对（表格布局，兼容邮件客户端）。"""
+    rv = inv.get("lottery_review") or {}
+    if not rv.get("ok"):
+        # 无号可核时整段不渲染：当日没推荐购彩，邮件里就不出现任何相关信息
+        return ""
+
+    out = (f'<div style="{_f(13, GOLD, "700", 1.6)}margin:14px 0 6px">'
+           f'■ 往期推荐核对（官方开奖数据）</div>')
+    for it in rv["items"]:
+        res = it["result"]
+        win = bool(res and res["win"])
+        border = "#c0453b" if win else LINE
+        bg = "#fff6f4" if win else SOFT
+        pick = "".join(_ball(n) for n in it["front"])
+        if it.get("back"):
+            pick += (f'<span style="{_f(12, INK2, "normal", 1)}margin:0 4px">+</span>'
+                     + "".join(_ball(n, True) for n in it["back"]))
+        issue = f' 第 {_e(res["issue"])} 期' if res else ""
+        tag = "（复算补录）" if it.get("recomputed") else ""
+        verdict = ("开奖结果尚未公布" if not res else
+                   (f'中 {res["level"]}　{res["prize_note"]}' if win
+                    else f'未中奖（命中 {res["hit_txt"]}）'))
+        draw = ""
+        if res:
+            draw = "".join(_ball(n, gray=True) for n in res["draw_front"])
+            if res.get("draw_back"):
+                draw += (f'<span style="{_f(12, INK2, "normal", 1)}margin:0 4px">+</span>'
+                         + "".join(_ball(n, gray=True) for n in res["draw_back"]))
+            draw = (f'<div style="{_f(11.5, INK3, "normal", 1.6)}margin:6px 0 3px">'
+                    f'开奖</div><div>{draw}</div>')
+        out += (
+            f'<table width="100%" cellpadding="0" cellspacing="0" border="0" '
+            f'bgcolor="{bg}" style="background:{bg};border:1px solid {border};'
+            f'border-radius:10px;border-collapse:separate;margin-top:9px">'
+            f'<tr><td style="padding:12px 14px">'
+            f'<div style="{_f(14, INK, "700", 1.5)}">'
+            f'{_e(it["date"])}（{_e(it["week"])}）{_e(it["game"])}{tag}{issue}'
+            f'<span style="{_f(11.5, "#c0453b" if win else INK2, "700", 1.5)}'
+            f'margin-left:8px">{_e(verdict)}</span></div>'
+            f'<div style="{_f(11.5, INK3, "normal", 1.6)}margin:8px 0 3px">推荐</div>'
+            f'<div>{pick}</div>{draw}'
+            f'</td></tr></table>')
+    out += _note("奖金以官方公告为准；浮动奖不在此估算金额。"
+                 "「复算补录」= 台账缺失时按当日盘面确定性重算，"
+                 "号码与当日实际推送完全一致。")
+    return out
 
 
 def _lottery(inv: Dict) -> str:
@@ -859,7 +908,8 @@ def render_mail_html(r: Dict) -> str:
         + _tips(inv["crypto"], 13.2)
         + _sub("■ 彩票娱乐")
         + _tips(inv["lottery"], 13.2)
-        + _lottery(inv))
+        + _lottery(inv)
+        + _lottery_review(inv))
     body.append(_sec("财", "投资 · 彩票 · 数字资产", invest, inv["score"]))
 
     body.append(_sec("学", "传统文化学习 · 今日一课",
