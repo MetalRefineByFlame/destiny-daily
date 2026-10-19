@@ -47,7 +47,7 @@ on:
     - cron: '17 0,1,2,3,4,5 * * *'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   # 第一步：决定这一步要不要真的发。Cloudflare / 手动触发一律放行，
@@ -163,6 +163,27 @@ jobs:
         run: |
           mkdir -p output
           python daily_run.py --stdout-text
+
+      # 彩票推荐台账必须「跨天累积」在仓库里。
+      # CI 每次都是全新 checkout，跑完即丢——不落库的话，
+      # 第二天跑「往期推荐核对」时账本是空的，昨天的号码就永远对不上奖。
+      # 这一步放在发信之前：哪怕邮件失败，台账也要留住。
+      # 另外 engine/lottery_result.py 里有「确定性复算」兜底，
+      # 即使这一步推送失败，次日依然能重算出昨天的号码，不会再次静默丢失。
+      - name: 回写彩票台账
+        continue-on-error: true
+        run: |
+          git config user.name "destiny-bot"
+          git config user.email "destiny-bot@users.noreply.github.com"
+          git add data/lottery_picks.json
+          if git diff --cached --quiet; then
+            echo "台账无变化，跳过提交"
+          else
+            DAY=$(TZ=Asia/Shanghai date +%F)
+            git commit -m "chore: 彩票台账 ${DAY}"
+            git push
+            echo "台账已回写仓库：${DAY}"
+          fi
 
       - name: 定位产物
         id: locate
