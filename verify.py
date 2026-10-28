@@ -689,6 +689,57 @@ finally:
     if os.path.exists(_tmp_log):
         os.remove(_tmp_log)
 
+# ---- 数据源容错：官方站按 IP 属地 403，必须能回落备用源 ----
+# 背景：2026-10-26 云端早报把 10-25 已开奖的快乐8 显示成「尚未公布」，
+# 根因是 cwl.gov.cn 对境外出口（GitHub Actions）一律 403，取数失败被当成未公布。
+# 下面几条断言钉死：备用源可解析、官方挂掉会回落、全挂时文案必须说「取数失败」。
+_XML_SAMPLE = """<?xml version="1.0" encoding="utf-8"?>
+<xml>
+   <row expect="2026284" opencode="05,06,07,09,11,16,18,22,29,34,36,39,41,50,52,53,58,62,69,78" opentime="2026-10-25 21:30:00" updatetime="2026-10-25 21:55:46"/>
+   <row expect="26122" opencode="01,02,04,17,19,30|09" opentime="2026-10-25 21:15:00" updatetime="2026-10-25 21:20:21"/>
+</xml>"""
+_orig_text = _lr._http_text
+lr_had = hasattr(_lr, "_500")
+try:
+    _lr._http_text = lambda *a, **k: _XML_SAMPLE
+    _k5 = _lr._500("快乐8", 5) if lr_had else []
+    _s5 = _lr._500("双色球", 5) if lr_had else []
+finally:
+    _lr._http_text = _orig_text
+check("备用源·快乐8 取到开奖日期", _k5[0]["date"] if _k5 else None, "2026-10-25")
+check("备用源·快乐8 号码 20 个", len(_k5[0]["front"]) if _k5 else 0, 20)
+check("备用源·双色球按 | 拆分前后区",
+      (_s5[0]["front"], _s5[0]["back"]) if _s5 else None,
+      ([1, 2, 4, 17, 19, 30], [9]))
+
+_orig_cwl, _orig_dlt, _orig_500 = _lr._cwl, _lr._dlt, _lr._500
+try:
+    _lr._cwl = lambda *a, **k: []          # 模拟境外：官方接口 403 → 空
+    _lr._dlt = lambda *a, **k: []
+    _lr._500 = lambda g, c: [{"date": "2026-10-25", "issue": "2026284",
+                              "front": [5, 6, 7], "back": []}]
+    _fb = _lr.fetch_draws("快乐8")
+    check("官方源不可达时回落备用源", bool(_fb), True)
+    check("回落来源标记为 500", _lr._FETCH_STATE.get("快乐8", {}).get("source"), "500")
+
+    # 全部源都挂掉：必须标记 unreachable，不能伪装成「官方未公布」
+    _lr._500 = lambda g, c: []
+    _tmp_log3 = os.path.join(_tmpf.gettempdir(), "_destiny_picks_verify3.json")
+    _lr.LOG_PATH = _tmp_log3
+    with open(_tmp_log3, "w", encoding="utf-8") as _f:
+        json.dump({"2026-10-25": {"game": "快乐8", "back": [],
+                                  "front": list(range(1, 11)),
+                                  "score": 50.0}}, _f, ensure_ascii=False)
+    _rv3 = _lr.review(datetime(2026, 10, 26, 8, 0))
+    check("全源不可达·标记为取数失败",
+          _rv3["items"][0].get("result_reason"), "unreachable")
+    check("全源不可达·note 不得说「尚未公布」",
+          "尚未公布" in _rv3["note"], False)
+    os.remove(_tmp_log3)
+finally:
+    _lr._cwl, _lr._dlt, _lr._500 = _orig_cwl, _orig_dlt, _orig_500
+    _lr.LOG_PATH = _real_log
+
 # ---- 行为规范：有推荐→次日早报必带核对；无推荐→早报无任何相关信息 ----
 _orig_review, _orig_record = _lr.review, _lr.record_from_block
 _tmp_log2 = os.path.join(_tmpf.gettempdir(), "_destiny_picks_verify2.json")
