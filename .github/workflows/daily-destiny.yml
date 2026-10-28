@@ -164,6 +164,20 @@ jobs:
           mkdir -p output
           python daily_run.py --stdout-text
 
+      # 开奖数据源自检：福彩官网/体彩官网按 IP 属地封锁，境外出口一律 403，
+      # 代码会自动切换到 500 彩票网的备用源。这里只做可见性检查——
+      # 真出现「取数失败」时在 Actions 日志里打个 warning，别让它再静默溜过去。
+      - name: 开奖数据源自检
+        continue-on-error: true
+        run: |
+          TXT=$(ls -1t output/destiny-*.txt | head -1)
+          if grep -q "取数失败" "$TXT"; then
+            echo "::warning::开奖数据源全部不可达，本期核对缺失（官方站与备用源均失败）"
+            grep -n "取数失败" "$TXT" || true
+          else
+            echo "开奖数据源正常"
+          fi
+
       # 彩票推荐台账必须「跨天累积」在仓库里。
       # CI 每次都是全新 checkout，跑完即丢——不落库的话，
       # 第二天跑「往期推荐核对」时账本是空的，昨天的号码就永远对不上奖。
