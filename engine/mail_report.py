@@ -526,7 +526,9 @@ def _lottery_review(inv: Dict) -> str:
                      + "".join(_ball(n, True) for n in it["back"]))
         issue = f' 第 {_e(res["issue"])} 期' if res else ""
         tag = "（复算补录）" if it.get("recomputed") else ""
-        verdict = ("开奖结果尚未公布" if not res else
+        verdict = ("开奖数据获取失败（数据源不可达）"
+                   if not res and it.get("result_reason") == "unreachable"
+                   else "开奖结果尚未公布" if not res else
                    (f'中 {res["level"]}　{res["prize_note"]}' if win
                     else f'未中奖（命中 {res["hit_txt"]}）'))
         draw = ""
