@@ -254,6 +254,28 @@
       16
     ],
     "game": "双色球",
+    "result": {
+      "draw_back": [
+        12
+      ],
+      "draw_date": "2026-10-27",
+      "draw_front": [
+        4,
+        5,
+        20,
+        21,
+        26,
+        30
+      ],
+      "draw_txt": "04 05 20 21 26 30  +  12",
+      "hit_back": 0,
+      "hit_front": 1,
+      "hit_txt": "1+0",
+      "issue": "26123",
+      "level": "未中奖",
+      "prize_note": "",
+      "win": false
+    },
     "score": 66.0
   },
   "2026-10-28": {
