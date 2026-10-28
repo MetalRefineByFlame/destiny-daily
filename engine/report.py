@@ -672,7 +672,9 @@ def render_html(r: Dict) -> str:
                         + "".join(f'<span class="ball b">{n}</span>' for n in it["back"]))
             issue = (f' 第 {_e(res["issue"])} 期' if res else "")
             tag = "（复算补录）" if it.get("recomputed") else ""
-            verdict = ("开奖结果尚未公布" if not res else
+            verdict = ("开奖数据获取失败（数据源不可达）"
+                       if not res and it.get("result_reason") == "unreachable"
+                       else "开奖结果尚未公布" if not res else
                        (f'中 {_e(res["level"])}　{_e(res["prize_note"])}' if win
                         else f'未中奖（命中 {_e(res["hit_txt"])}）'))
             draw = ""
@@ -862,7 +864,11 @@ def render_text(r: Dict) -> str:
                            else f"未中奖（命中 {res['hit_txt']}）")
                 L.append(f"      结果：{verdict}")
             else:
-                L.append("      结果：开奖结果尚未公布（以官方公告为准）")
+                if it.get("result_reason") == "unreachable":
+                    L.append("      结果：开奖数据暂时获取失败（数据源不可达），"
+                             "非官方未公布，下次跑批会自动补核")
+                else:
+                    L.append("      结果：开奖结果尚未公布（以官方公告为准）")
         L.append("  · 奖金以官方公告为准；浮动奖不在此估算金额。")
         if any(x.get("recomputed") for x in rv["items"]):
             L.append("  · 注：「复算补录」= 台账缺失时按当日盘面确定性重算，"
