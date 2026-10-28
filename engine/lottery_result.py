@@ -2,14 +2,24 @@
 """
 彩票推荐「回溯核对」：把历次推送过的号码记进台账，次日自动抓官方开奖号并对奖。
 
-数据来源（均为官方站点，只读）：
-  双色球 / 快乐8 -> 中国福利彩票 www.cwl.gov.cn
-  大乐透       -> 中国体育彩票 webapi.sporttery.cn
+数据来源：
+  主源（官方，只读）：
+    双色球 / 快乐8 -> 中国福利彩票 www.cwl.gov.cn
+    大乐透        -> 中国体育彩票 webapi.sporttery.cn
+  备用源（仅主源不可达时启用）：
+    500 彩票网 XML -> kaijiang.500.com/static/info/kaijiang/xml/<code>/list.xml
+
+  ⚠ 为什么必须有备用源：cwl.gov.cn 与 sporttery.cn 按 IP 属地封锁，
+    境外出口（GitHub Actions 的 Azure 节点）访问一律返回 403 Forbidden，
+    而早报正是跑在 GitHub Actions 上的。没有备用源，云端永远核不出奖，
+    还会把「取数失败」误报成「官方尚未公布」。
+    500 彩票网全球可达（含美国节点），三个彩种统一 XML、含开奖日期，故选它兜底。
 
 设计原则：
   1) 只对「已经推送过」的号码核对，不做事后诸葛式的补号。
   2) 台账落盘（data/lottery_picks.json），结果算过一次就缓存，不重复联网。
-  3) 抓不到开奖数据时降级为「待开奖/待核对」，绝不影响主报告生成。
+  3) 抓不到开奖数据时降级，绝不影响主报告生成；但**必须如实说明是取数失败，
+     不得伪装成「官方未公布」**（用 result_reason 区分）。
   4) 只报「中没中、中几个、几等奖」，不承诺具体金额（浮动奖以官方公告为准）。
 """
 from __future__ import annotations
@@ -89,16 +99,105 @@ def _dlt(count: int) -> List[Dict]:
     return out
 
 
+# ---- 备用源：500 彩票网（全球可达，用于境外出口的 CI 环境）----
+_XML_500_CODE = {"双色球": "ssq", "大乐透": "dlt", "快乐8": "kl8"}
+_XML_500_URL = "https://kaijiang.500.com/static/info/kaijiang/xml/{code}/list.xml"
+
+# 各彩种合法号码形态 (前区个数, 后区个数)。备用源必须逐条校验，
+# 否则格式一变就会把别的玩法的号码当成当日开奖号，导致奖级误判。
+_DRAW_SHAPE = {"双色球": (6, 1), "大乐透": (5, 2), "快乐8": (20, 0)}
+
+# 每次抓取后记录状态，供 review() 区分「取数失败」与「官方确实未公布」
+_FETCH_STATE: Dict[str, Dict] = {}
+
+
+def _http_text(url: str, referer: str = "") -> Optional[str]:
+    """取纯文本（HTML / XML 数据源）。失败返回 None。"""
+    h = dict(UA)
+    if referer:
+        h["Referer"] = referer
+    try:
+        req = urllib.request.Request(url, headers=h)
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            raw = resp.read()
+    except (urllib.error.URLError, urllib.error.HTTPError, ValueError, OSError):
+        return None
+    for enc in ("utf-8", "gb18030"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", "replace")
+
+
+def _500(game: str, count: int) -> List[Dict]:
+    """
+    500 彩票网 XML：<row expect="期号" opencode="号码" opentime="开奖时间"/>
+      opencode 用 | 分隔前后区：双色球 6+1、大乐透 5+2、快乐8 无分隔（20 个）。
+    """
+    code = _XML_500_CODE.get(game)
+    if not code:
+        return []
+    txt = _http_text(_XML_500_URL.format(code=code),
+                     referer="https://kaijiang.500.com/")
+    if not txt:
+        return []
+    out: List[Dict] = []
+    shape = _DRAW_SHAPE.get(game)
+    for m in re.finditer(r"<row\b([^>]*?)/?>", txt):
+        attrs = m.group(1)
+
+        def attr(key: str) -> str:
+            mm = re.search(rf'{key}\s*=\s*"([^"]*)"', attrs)
+            return mm.group(1) if mm else ""
+
+        date = attr("opentime")[:10]
+        raw_nums = attr("opencode")
+        if not date or not raw_nums:
+            continue
+        seg = raw_nums.split("|")
+        front = [int(x) for x in re.findall(r"\d+", seg[0])]
+        back = [int(x) for x in re.findall(r"\d+", seg[1])] if len(seg) > 1 else []
+        if not front:
+            continue
+        if shape and (len(front), len(back)) != shape:
+            continue          # 形态不符，宁可不用也不能错判
+        out.append({"date": date, "issue": attr("expect"),
+                    "front": sorted(front), "back": sorted(back)})
+        if len(out) >= count:
+            break
+    return out
+
+
 def fetch_draws(game: str, count: int = 20) -> List[Dict]:
+    """
+    取该彩种最近若干期开奖。官方源优先，不可达时自动切备用源。
+
+    返回 [] 表示「两个源都没拿到」——调用方必须据此区分失败原因，
+    不能当成「官方还没公布」。
+    """
+    out: List[Dict] = []
+    err = ""
     try:
         if game == "双色球":
-            return _cwl("ssq", count)
-        if game == "快乐8":
-            return _cwl("kl8", count)
-        if game == "大乐透":
-            return _dlt(count)
-    except Exception:      # noqa: BLE001
-        pass
+            out = _cwl("ssq", count)
+        elif game == "快乐8":
+            out = _cwl("kl8", count)
+        elif game == "大乐透":
+            out = _dlt(count)
+    except Exception as exc:      # noqa: BLE001
+        err = f"official:{type(exc).__name__}"
+    if out:
+        _FETCH_STATE[game] = {"ok": True, "source": "official", "reason": ""}
+        return out
+
+    backup = _500(game, count)
+    if backup:
+        _FETCH_STATE[game] = {"ok": True, "source": "500", "reason": ""}
+        return backup
+
+    _FETCH_STATE[game] = {"ok": False, "source": "",
+                          "reason": err or "all-sources-unreachable"}
     return []
 
 
@@ -304,11 +403,17 @@ def review(today: datetime, offline: bool = False) -> Dict:
             item["result"] = None
         else:
             draw = find_draw(item["game"], ds)
-            item["result"] = (settle(item["game"], item["front"],
-                                     item["back"], draw) if draw else None)
-            if item["result"]:
+            if draw:
+                item["result"] = settle(item["game"], item["front"],
+                                        item["back"], draw)
                 rec["result"] = item["result"]
                 dirty = True
+            else:
+                item["result"] = None
+                # 取数失败 ≠ 官方未公布：抓取状态决定文案，避免再次误导
+                state = _FETCH_STATE.get(item["game"]) or {}
+                item["result_reason"] = ("not_published" if state.get("ok")
+                                         else "unreachable")
         found.append(item)
 
     if dirty:
@@ -319,5 +424,8 @@ def review(today: datetime, offline: bool = False) -> Dict:
     if not items:
         note = "（昨日建议停买，无号码可核对）"
     elif not any(x.get("result") for x in items):
-        note = "（开奖结果尚未公布）"
+        if any(x.get("result_reason") == "unreachable" for x in items):
+            note = "（开奖数据获取失败：数据源当前不可达）"
+        else:
+            note = "（开奖结果尚未公布）"
     return {"ok": bool(items), "items": items, "note": note}
