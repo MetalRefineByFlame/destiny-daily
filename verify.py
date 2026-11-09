@@ -298,7 +298,7 @@ for _tag in ("table", "tr", "td", "div"):
 _MARKERS = {
     "本命提要": False, "每日一卦": False, "五门评分": False, "日常生活": False,
     "健康": False, "出行方位": False, "人际关系": False, "投资": False,
-    "传统文化学习": False, "每日一句经典": False,
+    "传统文化学习": False, "每日一句经典": False, "今日黄历": False,
 }
 _missing = [k for k in _MARKERS if k not in _mail_html]
 check("邮件版栏目齐全", _missing, [])
@@ -501,13 +501,14 @@ check("邮件版带链接", "search.bilibili.com" in _mail_html, True)
 # 旧版那句写死的「轮换专题」不该再出现
 check("旧版轮换文案已清除", "（轮换专题）" in _rhtml or "（轮换专题）" in _mail_html, False)
 
-# ---------------------------------------------------------------- 数字资产：羊毛 + 观察清单
+# ---------------------------------------------------------------- 投资：A股复盘 + 仅 BTC 观察清单
 print()
 print("-" * 78)
-print("11) 数字资产（wool：平台活动薅羊毛 + 观察清单）")
+print("11) 投资（A股复盘 + BTC 观察清单；平台活动薅羊毛已删除）")
 print("-" * 78)
 
-from engine import wool as _wo  # noqa: E402
+from engine import wool as _wo, market as _mk, astock as _ak  # noqa: E402
+from engine.mail_report import _astock_mail as _astock_mail  # noqa: E402
 
 # --- 打卡清单必须彻底消失（2026-10-03 江公子要求移除）---
 check("报告不再有 checklist 字段", "checklist" in _rp, False)
@@ -527,69 +528,167 @@ for _f_ in ("engine/synthesize.py", "engine/report.py", "engine/mail_report.py")
 check("源码不再调用 market.review", "market.review" in _src, False)
 check("源码不再引用 inv['btc'] 取值", "get(\"btc\"" in _src, False)
 
-# --- 常青羊毛库完整性 ---
-check("羊毛库条目数", len(_wo.WOOL), 14)
-check("条目 key 唯一", len({w["key"] for w in _wo.WOOL}), len(_wo.WOOL))
-check("条目字段无空缺",
-      [w["key"] for w in _wo.WOOL
-       if not all(w.get(k) for k in ("name", "kind", "need", "how",
-                                     "gain", "risk", "link", "one"))], [])
-check("星级在 1~5", [w["key"] for w in _wo.WOOL
-                     if not 1 <= w["stars"] <= 5], [])
-check("链接均为 https",
-      [w["key"] for w in _wo.WOOL if not w["link"].startswith("https://")], [])
-# 双币投资是高风险产品，必须被明确标出来，不能混在羊毛里
-_dual = next(w for w in _wo.WOOL if w["key"] == "dual")
-check("双币投资标为高风险", "高风险" in _dual["kind"] and _dual["stars"] <= 1, True)
-check("高风险项文案含警示", "不是羊毛" in _dual["risk"], True)
-check("防坑清单不少于5条", len(_wo.SAFETY) >= 5, True)
+# --- 薅羊毛必须彻底删除（2026-11-09 江公子要求）---
+check("模块不再有 WOOL 通道库", hasattr(_wo, "WOOL"), False)
+check("模块不再有 SAFETY 防坑清单", hasattr(_wo, "SAFETY"), False)
+check("模块不再有 pick_wool", hasattr(_wo, "pick_wool"), False)
+check("模块不再有 wool_advice", hasattr(_wo, "wool_advice"), False)
+_iv_src = ""
+for _f_ in ("engine/wool.py", "engine/report.py", "engine/mail_report.py"):
+    with open(_f_, encoding="utf-8") as _fh:
+        _iv_src += _fh.read()
+check("源码不再出现「薅羊毛」", "薅羊毛" in _iv_src, False)
+check("源码不再出现「平台活动」", "平台活动" in _iv_src, False)
+check("源码不再出现「常青通道」", "常青通道" in _iv_src, False)
+check("源码不再出现「怎么薅」", "怎么薅" in _iv_src, False)
+check("assets 只剩观察清单与免责",
+      set(_rp["invest"]["assets"]), {"watch", "disclaimer"})
 
-# --- 轮换：确定性 + 覆盖全库 ---
-_p0 = _wo.pick_wool(_d0)
-_p0b = _wo.pick_wool(_d0)
-check("同一天结果一致", [w["key"] for w in _p0["focus"]],
-      [w["key"] for w in _p0b["focus"]])
-_n2 = len(_wo.WOOL)
-_seen = set()
-for _i in range(_n2):                       # 每天推进 2 条，走满 n/2 天即覆盖全库
-    _pk = _wo.pick_wool(_d0 + _td(days=_i))
-    _seen.update(w["key"] for w in _pk["focus"])
-check("半轮覆盖全部条目", len(_seen), _n2)
-check("重点条数", len(_p0["focus"]), 2)
-check("速览不与重点重复",
-      [w["key"] for w in _p0["glance"] if w["key"] in
-       {x["key"] for x in _p0["focus"]}], [])
-check("速览条数", len(_p0["glance"]), 4)
-check("首日从库首开始", _wo.pick_wool(_wo.datetime(2026, 10, 3))["cursor"], 0)
-
-# --- 财气分档建议 ---
-_a1, _a2, _a3, _a4 = (_wo.wool_advice(s) for s in (80.0, 55.0, 45.0, 30.0))
-check("四档建议各不相同", len({_a1, _a2, _a3, _a4}), 4)
-check("偏弱档明确收缩动作", "不做新开仓" in _a3, True)
-check("极弱档明确只收不进", "一律不动" in _a4, True)
-
-# --- 观察清单 ---
+# --- 观察清单只保留 BTC ---
 _wl = _wo.watch_rows(offline=True)
 check("离线时优雅降级", _wl["ok"], False)
-check("离线仍列全清单", len(_wl["rows"]), len(_wo.WATCHLIST))
-check("清单每项有名称与观察理由",
-      [r["name"] for r in _wl["rows"] if not r.get("why")], [])
-check("清单定位齐备", [r["name"] for r in _wl["rows"] if not r.get("role")], [])
+check("观察清单仅 1 条", len(_wl["rows"]), 1)
+check("唯一标的为 BTC", _wl["rows"][0]["name"], "BTC")
+check("WATCHLIST 只含 BTCUSDT", [w[0] for w in _wo.WATCHLIST], ["BTCUSDT"])
+check("BTC 有定位与观察理由",
+      bool(_wl["rows"][0]["role"]) and bool(_wl["rows"][0]["why"]), True)
 check("未取到时无价格字段", [r["name"] for r in _wl["rows"]
                              if r.get("ok") and "price_txt" not in r], [])
-check("观察清单含 BNB（与羊毛门槛相关）",
-      any(r["name"] == "BNB" for r in _wl["rows"]), True)
+check("旧标的已从行情映射移除",
+      [k for k in _mk.GECKO_IDS if k != "BTCUSDT"], [])
+check("CoinGecko 覆盖唯一标的", "BTCUSDT" in _mk.GECKO_IDS, True)
+check("Coinbase 覆盖唯一标的", "BTCUSDT" in _mk.COINBASE_PAIRS, True)
+# 即便 profile 里残留旧 watchlist 配置，也必须被强制收敛为 BTC
+_wl2 = _wo.watch_rows(["ETHUSDT", "XRPUSDT"], offline=True)
+check("旧配置不会带回其它标的",
+      [r["name"] for r in _wl2["rows"]], ["BTC"])
+
+# --- A股复盘：解析层用桩数据做确定性校验（不联网）---
+from datetime import timezone as _tz  # noqa: E402
+_CST8 = _tz(timedelta(hours=8))
+_TS_CLOSE = int(datetime(2026, 11, 6, 15, 0, tzinfo=_CST8).timestamp())
+_EM_IX = {"data": {"diff": [
+    {"f2": 3665.94, "f3": 0.46, "f6": 455320337484.4, "f12": "000001",
+     "f14": "上证指数", "f124": _TS_CLOSE},
+    {"f2": 11206.24, "f3": -0.27, "f6": 554147164007.0, "f12": "399001",
+     "f14": "深证成指", "f124": _TS_CLOSE},
+    {"f2": 2478.94, "f3": 0.56, "f6": 286534110973.7, "f12": "399006",
+     "f14": "创业板指", "f124": _TS_CLOSE},
+    {"f2": 1261.95, "f3": 0.70, "f6": 46392877279.8, "f12": "000688",
+     "f14": "科创50", "f124": _TS_CLOSE},
+    {"f2": 4064.17, "f3": 0.24, "f6": 263147204587.8, "f12": "000300",
+     "f14": "沪深300", "f124": _TS_CLOSE}]}}
+_EM_BR = {"data": {"diff": [{"f104": 1107, "f105": 1147, "f106": 103}]}}
+_EM_UP = {"data": {"diff": [{"f3": 5.04, "f14": "卫浴电器"},
+                            {"f3": 4.85, "f14": "印制电路板"}]}}
+_EM_DN = {"data": {"diff": [{"f3": -2.73, "f14": "宠物食品"}]}}
+_orig_gj, _orig_get = _ak._get_json, _ak._get
+
+
+def _em_stub(url, headers=None, timeout=8):
+    if "f104" in url:
+        return _EM_BR
+    if "clist" in url:
+        return _EM_UP if "po=1" in url else _EM_DN
+    return _EM_IX
+
+
+_ak._get_json = _em_stub
+try:
+    _em = _ak._eastmoney()
+finally:
+    _ak._get_json = _orig_gj
+check("东财五大指数解析", len(_em["indices"]), 5)
+check("东财指数点位正确", _em["indices"][0]["close"], 3665.94)
+check("东财成交额换算为亿元", _em["indices"][0]["amount_yi"], 4553.2)
+check("东财收盘时间戳判为收盘复盘", _em["session"], "收盘复盘")
+check("东财数据日期取自数据源", _em["date"], "2026-11-06")
+check("东财涨跌家数齐备", _em["breadth"], {"up": 1107, "down": 1147, "flat": 103})
+check("东财领涨板块解析", len(_em["sectors_up"]), 2)
+check("东财领跌板块解析", len(_em["sectors_down"]), 1)
+check("东财客观小结非空", bool(_ak._summary(_em)), True)
+
+# 12:00 的盘中数据不能被说成收盘复盘
+_TS_MID = int(datetime(2026, 11, 9, 12, 0, tzinfo=_CST8).timestamp())
+_EM_MID = {"data": {"diff": [dict(_EM_IX["data"]["diff"][0], f124=_TS_MID)]}}
+_ak._get_json = lambda u, headers=None, timeout=8: _EM_MID if "f124" in u else _EM_BR
+try:
+    _mid = _ak._eastmoney()
+finally:
+    _ak._get_json = _orig_gj
+check("盘中快照如实标注", _mid["session"], "盘中快照")
+
+# 腾讯 / 新浪 / Yahoo 的解析也各测一次，确保备用源不是摆设
+_tx = ('v_s_sh000001="1~上证指数~000001~3665.94~16.76~0.46~'
+       '280353411~45532034~~642438.43~ZS~";')
+_txr = _ak._text_indices(_tx, "v_s_", sina=False)
+check("腾讯简版行情解析", len(_txr), 1)
+check("腾讯成交额换算为亿元", _txr[0]["amount_yi"], 4553.2)
+_sn = 'var hq_str_s_sh000001="上证指数,3665.9448,16.7674,0.46,2803534,45532034";'
+_snr = _ak._text_indices(_sn, "hq_str_s_", sina=True)
+check("新浪简版行情解析", len(_snr), 1)
+check("新浪涨跌幅解析", _snr[0]["chg"], 0.46)
+_YH = {"chart": {"result": [{"timestamp": [100, 200],
+                             "indicators": {"quote": [{"close": [100.0, 101.5]}]}}]}}
+_ak._get_json = lambda u, headers=None, timeout=8: _YH
+try:
+    _yh = _ak._yahoo()
+finally:
+    _ak._get_json = _orig_gj
+check("Yahoo 日线涨跌幅计算", round(_yh["indices"][0]["chg"], 2), 1.5)
+check("Yahoo 境外源标记", _yh["source"], "Yahoo Finance")
+
+# 全源不可达：必须明说，不得伪装成「尚未公布」
+def _boom(*a, **k):
+    raise OSError("all down")
+
+
+_ak._get_json, _ak._get = _boom, _boom
+_ak.reset_cache()
+try:
+    _fail = _ak.fetch(offline=False, use_cache=False)
+finally:
+    _ak._get_json, _ak._get = _orig_gj, _orig_get
+    _ak.reset_cache()
+check("全源不可达 reason", _fail["reason"], "unreachable")
+check("不可达时不做复盘", _fail["ok"] and bool(_fail["indices"]), False)
+check("不可达文案不含「尚未公布」",
+      "尚未公布" in "\n".join(_ak.render_astock_text(_fail)), False)
+check("不可达文案明确标数据源不可达",
+      "行情数据获取失败（数据源不可达）" in "\n".join(_ak.render_astock_text(_fail)), True)
+check("离线模式单独标注", _ak.fetch(offline=True)["reason"], "offline")
+
+# 涨红跌绿（A股习惯）+ 邮件版 table 安全
+_fake = {"ok": True, "source": "桩数据", "session": "收盘复盘",
+         "as_of": "2026-11-06 15:00", "date": "2026-11-06",
+         "indices": [{"name": "上证指数", "close": 3600.0, "chg": 1.25,
+                      "amount_yi": 4500.0},
+                     {"name": "创业板指", "close": 2400.0, "chg": -0.80,
+                      "amount_yi": 2600.0}],
+         "breadth": {"up": 3000, "down": 1500, "flat": 100},
+         "sectors_up": [{"name": "卫浴电器", "chg": 5.04}],
+         "sectors_down": [{"name": "宠物食品", "chg": -2.73}],
+         "disclaimer": "仅供复盘", "summary": "", "error": "", "reason": ""}
+_am = _astock_mail(_fake)
+check("A股涨用红色", "#b03030" in _am, True)
+check("A股跌用绿色", "#1f7a52" in _am, True)
+check("A股邮件用 table 渲染", _am.count("<table") >= 1, True)
+check("A股邮件无禁用 CSS",
+      [b for b in ("display:flex", "display: grid", "var(--",
+                   "linear-gradient") if b in _am], [])
+check("A股邮件标签配对",
+      all(_am.count("<" + t + " ") + _am.count("<" + t + ">")
+          == _am.count("</" + t + ">") for t in ("table", "tr", "td", "div")),
+      True)
 
 # --- 行情层：多源 fallback + 熔断 ---
-from engine import market as _mk  # noqa: E402
-
 check("价格源不少于3个", len(_mk.PRICE_SRC) >= 3, True)
 check("日线源不少于3个", len(_mk.SERIES_SRC) >= 3, True)
 check("CoinGecko 覆盖全部默认标的",
       [s for s, *_ in _wo.WATCHLIST if s not in _mk.GECKO_IDS], [])
-# Coinbase 无 BNB 现货：这是已知缺口，必须有别的源兜住，不能整栏失效
-check("BNB 至少有一个非 Coinbase 源",
-      "BNBUSDT" in _mk.GECKO_IDS or "BNBUSDT" in _mk.COINBASE_PAIRS, True)
+check("A股复盘备用源共 4 个", len(_ak.SOURCES), 4)
+check("A股复盘含境外源 Yahoo",
+      any(n == "yahoo" for n, _ in _ak.SOURCES), True)
 _mk.reset_breaker()
 check("初始未熔断", _mk._down("binance"), False)
 _mk._mark_down("binance")
@@ -606,23 +705,26 @@ except Exception:                            # noqa: BLE001
 check("熔断源直接抛错不联网", _raise, True)
 _mk.reset_breaker()
 
-# --- 三版渲染 ---
+# --- 三版渲染：旧内容删干净 + 新栏目齐全 ---
 _as = _rp["invest"].get("assets") or {}
 check("报告已带 assets 字段", bool(_as), True)
-check("文本版带薅羊毛段", "平台活动薅羊毛" in _rtxt(_rp), True)
-check("文本版带观察清单", "观察清单" in _rtxt(_rp), True)
-check("浏览器版带薅羊毛段", "平台活动薅羊毛" in _rhtml, True)
-check("邮件版带薅羊毛段", "平台活动薅羊毛" in _mail_html, True)
-check("邮件版带观察清单", "观察清单" in _mail_html, True)
-check("邮件版带重点通道名", _e(_as["focus"][0]["name"]) in _mail_html, True)
-check("邮件版带官网链接", _as["focus"][0]["link"] in _mail_html, True)
-check("邮件版带防坑提醒", "防坑提醒" in _mail_html, True)
+check("报告已带 astock 字段", bool(_rp["invest"].get("astock")), True)
+_BANNED = ("薅羊毛", "平台活动", "常青通道", "怎么薅", "前往官网",
+           "Launchpool", "HODLer", "Megadrop", "双币投资", "防坑提醒")
+for _nm, _s in (("文本", _txt), ("浏览器", _rhtml), ("邮件", _mail_html)):
+    check(f"{_nm}版含 A股复盘栏", "A股复盘" in _s, True)
+    check(f"{_nm}版含 BTC 观察清单", "BTC 观察清单" in _s, True)
+    check(f"{_nm}版无已删推广内容", [k for k in _BANNED if k in _s], [])
+    check(f"{_nm}版无旧标的",
+          [k for k in ("ETH", "SOL", "BNB", "XRP") if k in _s], [])
+check("邮件版带新栏目名", "投资 · A股复盘 · 数字资产 · 彩票" in _mail_html, True)
 # 行情未取到时，邮件里必须如实说明，不能默默留空
 check("离线时邮件标注未取到", "未取到" in _mail_html, True)
 check("保留仓位纪律段", "仓位与账户纪律" in _mail_html, True)
+check("离线模式 A股不伪装成已复盘", "离线模式" in _mail_html, True)
 
 # --- 观察清单表格在邮件里必须是 table（不能退化成 div+flex） ---
-_wpos = _mail_html.find("观察清单")
+_wpos = _mail_html.find("BTC 观察清单")
 _wm = _mail_html[_wpos:_wpos + 2500] if _wpos >= 0 else ""
 check("观察清单用 table 渲染", _wm.count("<table") >= 1, True)
 check("观察清单无禁用 CSS",
@@ -785,6 +887,215 @@ finally:
     _lr.LOG_PATH = _real_log
     if os.path.exists(_tmp_log2):
         os.remove(_tmp_log2)
+
+# ---------------------------------------------------------------- 9) 今日黄历
+print()
+print("-" * 78)
+print("9) 今日黄历历注（宜忌 / 四离四绝 / 杨公忌 / 神诞）")
+print("-" * 78)
+
+from engine.almanac import almanac_of as _al, _si_map  # noqa: E402
+
+
+def _sp_names(al):
+    return [x["name"] for x in al["special"]]
+
+
+def _dt_names(al):
+    return [x["name"] for x in al["deities"]]
+
+
+_a0203 = _al(datetime(2026, 2, 3, 8, 0))
+check("四绝·立春前一日", any("四绝" in n and "立春" in n
+                        for n in _sp_names(_a0203)), True)
+_a0319 = _al(datetime(2026, 3, 19, 8, 0))
+check("四离·春分前一日", any("四离" in n and "春分" in n
+                        for n in _sp_names(_a0319)), True)
+_a1106 = _al(datetime(2026, 11, 6, 8, 0))
+check("四绝·立冬前一日", any("四绝" in n and "立冬" in n
+                        for n in _sp_names(_a1106)), True)
+check("四绝日标记为大忌", _a1106["warning_level"], 2)
+_a1221 = _al(datetime(2026, 12, 21, 8, 0))
+check("四离·冬至前一日", any("四离" in n and "冬至" in n
+                        for n in _sp_names(_a1221)), True)
+check("2026 年四离四绝共八日",
+      len([k for k in _si_map(2026) if k.year == 2026]), 8)
+
+_a1109 = _al(datetime(2026, 11, 9, 8, 0))
+check("平日不误报四离四绝",
+      any("四离" in n or "四绝" in n for n in _sp_names(_a1109)), False)
+check("建除·亥月亥日为建日", _a1109["jianchu"], "建")
+check("喜神方位按日干取", _a1109["xishen"], "正南（离）")
+check("宜忌均非空", bool(_a1109["yi"]) and bool(_a1109["ji"]), True)
+check("彭祖百忌含干支两条",
+      "丁不剃头" in _a1109["pengzu"] and "亥不嫁娶" in _a1109["pengzu"], True)
+
+_a0301 = _al(datetime(2026, 3, 1, 8, 0))
+check("杨公十三忌·正月十三", "杨公十三忌" in _sp_names(_a0301), True)
+_a0406 = _al(datetime(2026, 4, 6, 8, 0))
+check("神圣日·二月十九观音圣诞",
+      any("观世音菩萨圣诞" in n for n in _dt_names(_a0406)), True)
+_a0216 = _al(datetime(2026, 2, 16, 8, 0))
+check("除夕按次日春节判定",
+      any("除夕" in n for n in _dt_names(_a0216)), True)
+_a0910 = _al(datetime(2026, 9, 10, 8, 0))
+check("月小·地藏诞顺延廿九",
+      any("地藏王菩萨圣诞" in n for n in _dt_names(_a0910)), True)
+check("民岁腊·十月初一不重复",
+      len([n for n in _dt_names(_a1109) if "民岁腊" in n]), 1)
+
+# --- 三端渲染 + 邮件主题兼容（TXT 首行格式不得被新增栏目挤掉） ---
+_rA = _gen(datetime(2026, 11, 9, 8, 0), offline=True)
+for _nm, _s in (("文本", _rtxt(_rA)), ("浏览器", _rhtm(_rA)),
+                ("邮件", _rmail(_rA))):
+    check(f"{_nm}版含今日黄历栏", "今日黄历" in _s, True)
+    check(f"{_nm}版含宜忌", ("宜：" in _s) or ("宜 · 今日所喜" in _s), True)
+    check(f"{_nm}版含彭祖百忌", "彭祖百忌" in _s, True)
+_tA = _rtxt(_rA)
+check("文本版含忌日提醒", "【忌】十恶大败日" in _tA, True)
+check("文本版含神诞提醒", "民岁腊" in _tA, True)
+check("文本版含近日提醒", "近日提醒" in _tA, True)
+_first = _tA.splitlines()[0]
+check("文本首行仍为日期+干支（主题依赖）",
+      bool(re.match(r"^\d{4}年\d{2}月\d{2}日", _first)) and "丁亥日" in _first,
+      True)
+from notify_mail import derive_subject as _ds  # noqa: E402
+_pth = os.path.join(_tmpf.mkdtemp(), "almanac.txt")
+with open(_pth, "w", encoding="utf-8") as _f:
+    _f.write(_tA)
+check("邮件主题仍可解析出干支日", "丁亥日" in _ds(_pth), True)
+os.remove(_pth)
+
+# --- 健康版块改版：删力量训练 / 增肌营养，改体质食疗 + 穴位拍拉（2026-11-09） ---
+from engine import therapy as _th  # noqa: E402
+
+_hA = _rA["health"]
+check("健康字段已无训练/营养", ("training" in _hA or "nutrition" in _hA), False)
+check("打卡已无力量/蛋白项",
+      ("力量训练" in _hA["checkin"] or "蛋白达标" in _hA["checkin"]), False)
+check("打卡改为食疗/穴位/忌生冷",
+      all(k in _hA["checkin"] for k in ("今日食疗", "穴位拍拉", "忌生冷")), True)
+check("体质辨识与调理方向存在",
+      bool(_hA["constitution"]) and bool(_hA["direction"]), True)
+check("当前调理锚定四神汤", "四神汤" in _hA["current_regimen"], True)
+check("体质依据不少于三条", len(_hA["basis"]) >= 3, True)
+check("食疗/穴位/忌口/常规功课均非空",
+      all([_hA["diet_items"], _hA["avoid"], _hA["acu_items"],
+           _hA["routine"], _hA["qigong"]]), True)
+
+for _nm, _s in (("文本", _tA), ("浏览器", _rhtm(_rA)), ("邮件", _rmail(_rA))):
+    check(f"{_nm}版含今日食疗", "今日食疗" in _s, True)
+    check(f"{_nm}版含穴位拍拉", "穴位拍拉" in _s, True)
+    check(f"{_nm}版含饮食宜忌", "饮食宜忌" in _s, True)
+    check(f"{_nm}版含四神汤", "四神汤" in _s, True)
+    check(f"{_nm}版含医疗免责", "非医疗诊断" in _s, True)
+    check(f"{_nm}版已删力量训练",
+          ("力量训练" in _s or "营养补给" in _s or "蛋白达标" in _s), False)
+
+_d0 = datetime(2026, 11, 9, 8, 0)
+_plans = [_th.therapy_of(_d0 + timedelta(days=k))["diet"]["name"] for k in range(8)]
+check("食疗 8 日轮转不重样", len(set(_plans)), 8)
+check("同日食疗结果确定不变",
+      _th.therapy_of(_d0)["diet"]["name"], _th.therapy_of(_d0)["diet"]["name"])
+check("每方都以四神汤为底",
+      all(_th.CORE_DECOCTION in p["items"][0] for p in [_th.therapy_of(_d0 + timedelta(days=k))["diet"]
+                                                        for k in range(8)]), True)
+check("每方都有服法与暂停条件",
+      all(p["dose"] and p["care"] for p in _th.DIET_PLANS), True)
+check("穴位拍拉共 3 组", len(_th.ACU_GROUPS), 3)
+check("穴位组含迎香/足三里/太冲",
+      all(any(k in g["name"] + "".join(g["points"]) for g in _th.ACU_GROUPS)
+          for k in ("迎香", "足三里", "太冲")), True)
+check("11 月给出冬季提示", "冬三月" in _th.therapy_of(_d0)["season_note"], True)
+check("5 月给出夏季提示",
+      "夏月" in _th.therapy_of(datetime(2026, 5, 6, 8, 0))["season_note"], True)
+check("五行提示按脏腑联动",
+      "肺" in _th.therapy_of(_d0, focus_wx="金")["wx_note"], True)
+check("免责说明含面诊提示", "面诊" in _th.DISCLAIMER, True)
+
+# --- 隐私：公开仓库不含个人体质资料，档案只从 Secret 注入（2026-11-09） ---
+# 下面这个词表是「反向检查用的命中词」，不是任何人的体质档案；
+# 真实档案在 GitHub Secret DESTINY_CONSTITUTION，本地值文件已被 .gitignore 挡住。
+_PRIV_WORDS = ("齿痕舌", "晨起舌苔发白", "清水鼻涕", "指甲竖纹", "月牙",
+               "脾虚湿盛", "肺脾气虚", "肝血不足", "白苔齿痕", "甲象")
+_th_src = open(os.path.join("engine", "therapy.py"), encoding="utf-8").read()
+_mk_src = open(os.path.join("scripts", "make_profile.py"), encoding="utf-8").read()
+_ex_src = open(os.path.join("data", "profile.example.json"), encoding="utf-8").read()
+check("公开调理模块不含个人健康描述",
+      [w for w in _PRIV_WORDS if w in _th_src], [])
+check("公开档案生成器与模板不含个人健康描述",
+      [w for w in _PRIV_WORDS if w in _mk_src + _ex_src], [])
+check("默认体质档案为通用版", "通用调理" in _th.CONSTITUTION["label"], True)
+check("默认档案不作个体辨识",
+      "不作个体辨识" in "".join(_th.CONSTITUTION["basis"]), True)
+
+# 注入测试一律使用中性假数据，真实体质绝不写进公开验证脚本
+_fake = {"label": "测试体质A", "direction": "测试方向B",
+         "basis": ["测试依据1", "测试依据2"], "current_regimen": "测试底方C"}
+_a1 = _th.therapy_of(_d0, focus_wx="土", profile={"constitution": _fake})
+_a2 = _th.therapy_of(_d0, focus_wx="土")
+check("Secret 档案覆盖体质标签", _a1["constitution"], "测试体质A")
+check("Secret 档案覆盖调理方向", _a1["direction"], "测试方向B")
+check("Secret 档案覆盖依据条数", len(_a1["basis"]), 2)
+check("Secret 档案覆盖当前调理", _a1["current_regimen"], "测试底方C")
+check("Secret 注入不改变食疗轮转", _a1["diet"], _a2["diet"])
+check("Secret 注入不改变穴位组", _a1["acupoint"], _a2["acupoint"])
+check("Secret 注入不改变忌口与免责",
+      (_a1["avoid"], _a1["disclaimer"]), (_a2["avoid"], _a2["disclaimer"]))
+check("未注入时优雅降级为通用版", "通用调理" in _a2["constitution"], True)
+
+# 完整覆盖包（DESTINY_THERAPY）：可把个性化食疗/穴位文案也放进 Secret
+_pack = {
+    "core_decoction": "测试底方X",
+    "diet_plans": [{"name": "测试方Y", "items": ["测试做法"],
+                    "for": "测试对症", "dose": "测试服法", "care": "测试注意"}],
+    "avoid": ["测试忌口"],
+    "acu_groups": [{"name": "测试穴位组", "points": ["测试穴"], "method": ["测试手法"]}],
+    "routine": ["测试功课"], "timing": ["测试时辰"],
+    "season": {"冬": "测试冬季提示"}, "wx_note": {"土": "测试五行提示"},
+    "disclaimer": "测试免责", "evil_key": "应被忽略",
+}
+_a3 = _th.therapy_of(_d0, focus_wx="土", profile={"therapy": _pack})
+check("覆盖包替换底方", _a3["diet"]["items"][0], "测试底方X")
+check("覆盖包替换食疗", _a3["diet"]["name"], "测试方Y")
+check("覆盖包替换穴位", _a3["acupoint"]["name"], "测试穴位组")
+check("覆盖包替换忌口", _a3["avoid"], ["测试忌口"])
+check("覆盖包替换功课", _a3["routine"], ["测试功课"])
+check("覆盖包替换季节提示", _a3["season_note"], "测试冬季提示")
+check("覆盖包替换五行提示", _a3["wx_note"], "测试五行提示")
+check("覆盖包替换免责", _a3["disclaimer"], "测试免责")
+check("覆盖包忽略未知键",
+      set(_th._overrides({"therapy": _pack})) <= _th._OVERRIDE_KEYS, True)
+check("覆盖包字段为空时回退默认",
+      _th.therapy_of(_d0, profile={"therapy": {"diet_plans": []}})["diet"]["name"],
+      _a2["diet"]["name"])
+
+# make_profile.py 的 Secret 解析
+import subprocess as _sp  # noqa: E402
+_cmd = [sys.executable, "-B", "scripts/make_profile.py", "--print"]
+_o1 = _sp.run(_cmd, capture_output=True, text=True, encoding="utf-8",
+              env=dict(os.environ, DESTINY_CONSTITUTION=json.dumps(_fake, ensure_ascii=False)))
+check("make_profile 解析 Secret 成功", _o1.returncode, 0)
+check("make_profile 写入 constitution 段",
+      json.loads(_o1.stdout).get("constitution", {}).get("label"), "测试体质A")
+_o2 = _sp.run(_cmd, capture_output=True, text=True, encoding="utf-8",
+              env=dict(os.environ, DESTINY_CONSTITUTION="{不是json"))
+check("非法 Secret 显式报错不静默降级",
+      (_o2.returncode != 0 and "不是合法 JSON" in (_o2.stderr + _o2.stdout)), True)
+_o3 = _sp.run(_cmd, capture_output=True, text=True, encoding="utf-8",
+              env=dict(os.environ, DESTINY_THERAPY=json.dumps({"avoid": ["测试忌口"]})))
+check("make_profile 支持完整覆盖包 Secret",
+      json.loads(_o3.stdout).get("therapy", {}).get("avoid"), ["测试忌口"])
+
+# 工作流与忽略规则
+_wf = open(os.path.join(".github", "workflows", "daily-destiny.yml"), encoding="utf-8").read()
+check("工作流注入体质 Secret", "secrets.DESTINY_CONSTITUTION" in _wf, True)
+check("工作流注入调理覆盖 Secret", "secrets.DESTINY_THERAPY" in _wf, True)
+check("缺 Secret 时有可见 warning", "::warning::未配置 DESTINY_CONSTITUTION" in _wf, True)
+_seg = _wf.split("::warning::未配置 DESTINY_CONSTITUTION")[1][:200]
+check("缺 Secret 不阻断发信", "exit 1" in _seg, False)
+_gi = open(".gitignore", encoding="utf-8").read()
+check("本地私有 Secret 值文件被忽略", "data/*.local.json" in _gi, True)
 
 print()
 print("=" * 78)
