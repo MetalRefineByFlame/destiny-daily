@@ -34,15 +34,10 @@ CACHE_TTL = 300     # 秒。批量生成多天报告时避免重复联网
 
 # ---------------------------------------------------------------- 标的映射
 
-GECKO_IDS = {
-    "BTCUSDT": "bitcoin", "ETHUSDT": "ethereum", "SOLUSDT": "solana",
-    "BNBUSDT": "binancecoin", "XRPUSDT": "ripple",
-}
-# Coinbase 无 BNB 现货；缺失的标的该源直接跳过
-COINBASE_PAIRS = {
-    "BTCUSDT": "BTC-USD", "ETHUSDT": "ETH-USD", "SOLUSDT": "SOL-USD",
-    "XRPUSDT": "XRP-USD",
-}
+# 2026-11-09 起观察清单只保留 BTC（原 ETH/SOL/BNB/XRP 已按要求删除）。
+# 这里同步收敛映射表，避免旧标的以「隐式配置」形式残留。
+GECKO_IDS = {"BTCUSDT": "bitcoin"}
+COINBASE_PAIRS = {"BTCUSDT": "BTC-USD"}
 
 
 def reset_breaker() -> None:
