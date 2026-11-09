@@ -15,6 +15,11 @@
     DESTINY_CITY        出生地名称（仅用于展示）
     DESTINY_EMAIL       收件邮箱，例：you@qq.com（也可只设 MAIL_TO）
     MAIL_TO             收件邮箱（优先级低于 DESTINY_EMAIL）
+    DESTINY_CONSTITUTION 个人体质档案（JSON 字符串，含 label / direction /
+                        basis / current_regimen）—— 本仓库公开，这段代码与
+                        模板里一律不放真实体质资料，只从 Secret 注入。
+    DESTINY_THERAPY     可选：完整食疗 / 穴位文案覆盖包（JSON 字符串），
+                        用于把个性化措辞也放进 Secret，公开代码只留通用版。
 
 用法：
     python scripts/make_profile.py                # 生成（已存在则跳过，除非 --force）
@@ -89,6 +94,28 @@ def main() -> int:
     if email:
         prof["email"] = email
         filled.append("email")
+
+    # --- 隐私段：体质档案 / 个性化调理文案，只从 Secret 注入，绝不入公开仓库 ---
+    def _json_secret(name: str) -> dict:
+        raw = os.environ.get(name, "").strip()
+        if not raw:
+            return {}
+        try:
+            obj = json.loads(raw)
+        except json.JSONDecodeError as e:
+            raise SystemExit(f"[error] {name} 不是合法 JSON：{e}")
+        if not isinstance(obj, dict):
+            raise SystemExit(f"[error] {name} 应为 JSON 对象（dict），实际为 {type(obj).__name__}")
+        return obj
+
+    const = _json_secret("DESTINY_CONSTITUTION")
+    if const:
+        prof["constitution"] = const
+        filled.append("constitution")
+    pack = _json_secret("DESTINY_THERAPY")
+    if pack:
+        prof["therapy"] = pack
+        filled.append("therapy")
 
     if only_print:
         print(json.dumps(prof, ensure_ascii=False, indent=2))
