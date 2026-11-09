@@ -131,6 +131,7 @@ jobs:
           MAIL_TO: ${{ secrets.MAIL_TO }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          DESTINY_CONSTITUTION: ${{ secrets.DESTINY_CONSTITUTION }}
         run: |
           set -u
           missing=0
@@ -145,6 +146,13 @@ jobs:
             exit 1
           fi
           echo "Secrets 齐全"
+          # 体质档案是可选 Secret：缺了不阻断发信，但必须留下可见提示，
+          # 免得「个人体质辨识」静默退化成通用版而无人察觉。
+          if [ -z "${DESTINY_CONSTITUTION:-}" ]; then
+            echo "::warning::未配置 DESTINY_CONSTITUTION，健康栏目按通用体质档案生成（不含个人资料）"
+          else
+            echo "体质档案已从 Secret 注入"
+          fi
 
       - name: 生成个人档案（profile.json 不入库，由 Secrets 现场生成）
         env:
@@ -154,6 +162,9 @@ jobs:
           DESTINY_LONGITUDE: ${{ secrets.DESTINY_LONGITUDE }}
           DESTINY_CITY: ${{ secrets.DESTINY_CITY }}
           DESTINY_EMAIL: ${{ secrets.MAIL_TO }}
+          # 隐私段：个人体质档案与可选调理文案只从 Secrets 注入，公开仓库不含健康资料
+          DESTINY_CONSTITUTION: ${{ secrets.DESTINY_CONSTITUTION }}
+          DESTINY_THERAPY: ${{ secrets.DESTINY_THERAPY }}
         run: python scripts/make_profile.py --force
 
       - name: 生成当日报告
@@ -167,7 +178,7 @@ jobs:
       # 开奖数据源自检：福彩官网/体彩官网按 IP 属地封锁，境外出口一律 403，
       # 代码会自动切换到 500 彩票网的备用源。这里只做可见性检查——
       # 真出现「取数失败」时在 Actions 日志里打个 warning，别让它再静默溜过去。
-      - name: 开奖数据源自检
+      - name: 行情数据源自检
         continue-on-error: true
         run: |
           TXT=$(ls -1t output/destiny-*.txt | head -1)
@@ -176,6 +187,15 @@ jobs:
             grep -n "取数失败" "$TXT" || true
           else
             echo "开奖数据源正常"
+          fi
+          # A股复盘：东财/腾讯/新浪在境内可达，Yahoo 补 GitHub Actions 境外节点。
+          # 四源全挂时报告会写明「不可达」，这里在日志里留一条可见 warning，
+          # 避免「抓不到」被静默降级成「数据尚未公布」的历史问题重演。
+          if grep -q "行情数据获取失败（数据源不可达）" "$TXT"; then
+            echo "::warning::A股行情四源均不可达，本期复盘缺失"
+            grep -n "数据源不可达" "$TXT" || true
+          else
+            echo "A股行情数据源正常"
           fi
 
       # 彩票推荐台账必须「跨天累积」在仓库里。
