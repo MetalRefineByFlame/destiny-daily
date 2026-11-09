@@ -1,6 +1,10 @@
 # 个人档案（含出生数据/邮箱）—— 绝不入库，由 scripts/make_profile.py 从环境变量生成
 data/profile.json
 
+# 体质档案 / 个性化调理文案的本地 Secret 值（含个人健康资料）—— 绝不入库
+data/*.local.json
+data/*secret*.json
+
 # 本地专属文档（含本命盘，不公开）
 docs/*.local.md
 
