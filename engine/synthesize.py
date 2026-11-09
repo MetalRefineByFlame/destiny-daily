@@ -13,7 +13,7 @@ destiny-daily :: engine.synthesize
     人际   <- 八字日支刑冲合害 + 六壬六合/青龙 + 梅花体用
     投资   <- 八字财星(流日十神) + 六爻妻财 + 六壬财爻
     学习   <- 八字印星 + 文昌时 + 卦象
-    健康   <- 五行失衡 + 卦象意象 + 固定训练分化
+    健康   <- 五行失衡 + 体质食疗/经络拍拉轮转 + 八部金刚功早课
     日常   <- 五门综合 + 宜忌清单
 * 投资/彩票部分强制附带风险免责声明
 """
@@ -32,7 +32,8 @@ from .base import (
     solar_term_datetime, GAN_YANG,
 )
 from . import (bazi, qimen, liuren, yijing, market, lottery, zhouyi,
-               classic, curriculum, wool, lottery_result)
+               classic, curriculum, wool, lottery_result, almanac, therapy,
+               astock)
 from .lunar import lunar_info
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -179,6 +180,7 @@ def generate(target: datetime, profile: Optional[Dict] = None,
     zhouyi_pan = _zhouyi(ctx)
     return {
         "meta": _meta(ctx),
+        "almanac": almanac.almanac_of(target, lu=lu),
         "destiny": _destiny_summary(ctx),
         "zhouyi": zhouyi_pan,
         "classic": classic.daily_classic(ctx, zhouyi_pan,
@@ -400,34 +402,25 @@ def _health(ctx) -> Dict:
 
     t = tier(score)
     headline = [
-        "今日元气偏弱，训练宜降强度，重恢复与睡眠。",
-        "体力一般，按计划完成即可，不宜冲击极限重量。",
-        "状态平稳，常规训练日，注意热身与拉伸。",
-        "精力充沛，适合挑战重量或增加训练容量。",
-        "状态上佳，可安排强度课或突破性训练。",
+        "今日元气偏弱，调理从简：守四神汤底方、早卧，穴位只做轻缓按揉，不做拍打重手法。",
+        "体力一般，按日常功课走即可，忌贪凉、忌临时加味，重点守作息。",
+        "状态平稳，可完整完成食疗 + 穴位功课，留意舌象与体感变化。",
+        "精力较足，可加做一遍经络拍打，适当延长摩腹与泡脚时间。",
+        "状态上佳，宜把重心放在规律作息与坚持守方上，勿因好转而破忌口。",
     ][t]
 
-    week = WEEK_CN[target.weekday()]
-    fit = prof.get("fitness", {})
-    split = fit.get("weekly_split", {}).get(week, "综合训练")
-    goal = fit.get("goal", "")
-
-    training = [f"今日（{week}）分化：{split}"]
-    if t >= 3:
-        training.append("可尝试：主项冲 PR 或增加 1~2 组容量；组间休息压缩至 60~90 秒。")
-    elif t <= 1:
-        training.append("降载方案：总量降至常规的 60%，以动作质量与泵感为主。")
-    else:
-        training.append("按 8~12RM × 3~4 组完成，最后一组的 RIR 保留 2~3。")
-    focus = fit.get("focus", [])
-    if focus:
-        training.append(f"优先弱项：{'、'.join(focus)}，建议安排在训练前半程体力最充沛时。")
-    training.append("有氧建议：每周 2~3 次、每次 20~30 分钟 Zone2，避免过度消耗影响增肌。")
-
-    # 饮食
-    nutrition = []
-    nutrition.append("睡前 20:00 后减少碳水，保留 30g 缓释蛋白（酪蛋白/希腊酸奶）利于夜间合成。")
-    nutrition.append("训练后 30~60 分钟内：碳水:蛋白 ≈ 2:1。")
+    # --- 体质调理：食疗 / 忌口 / 穴位拍拉（按日干支轮转，纯本地推算）
+    tp = therapy.therapy_of(target, focus_wx=focus_wx, profile=prof)
+    diet = tp["diet"]
+    acu = tp["acupoint"]
+    diet_items = list(diet["items"]) + [
+        f"对症：{diet['for']}",
+        f"服法：{diet['dose']}",
+        f"注意：{diet['care']}",
+    ]
+    routine = (list(tp["routine"]) + list(tp["timing"])
+               + ([tp["season_note"]] if tp["season_note"] else [])
+               + ([tp["wx_note"]] if tp["wx_note"] else []))
 
     # 八部金刚功（只早上练一遍，不设晚课）
     qg = prof.get("qigong", {})
@@ -454,14 +447,27 @@ def _health(ctx) -> Dict:
         "headline": headline,
         "organ": WX_ORGAN.get(focus_wx, "脾胃"),
         "organ_tips": [o for o in organ_tips if o],
-        "training": training,
-        "nutrition": nutrition,
+        # 体质基线（只作日常调理参考，见 disclaimer）
+        "constitution": tp["constitution"],
+        "direction": tp["direction"],
+        "basis": tp["basis"],
+        "current_regimen": tp["current_regimen"],
+        # 今日食疗
+        "diet_name": diet["name"],
+        "rotation_hint": tp["rotation_hint"],
+        "diet_items": diet_items,
+        "avoid": tp["avoid"],
+        # 今日穴位拍拉按摩
+        "acu_name": acu["name"],
+        "acu_items": list(acu["points"]) + list(acu["method"]),
+        "routine": routine,
         "qigong": qigong,
-        "goal": goal,
+        "disclaimer": tp["disclaimer"],
         "checkin": {
             "金刚功早课": False,
-            "力量训练": False,
-            "蛋白达标": False,
+            "今日食疗": False,
+            "穴位拍拉": False,
+            "忌生冷": False,
             "23点前入睡": False,
         },
     }
@@ -717,8 +723,8 @@ def _social(ctx) -> Dict:
 
 def _invest(ctx) -> Dict:
     """
-    传统术数视角的财气倾向。分「稳健理财/数字资产」「彩票娱乐」两段，
-    均附强风险提示 —— 不构成任何投资建议。
+    传统术数视角的财气倾向。分「A股复盘（客观事实层）」「数字资产观察清单」
+    「彩票娱乐」三段，均附强风险提示 —— 不构成任何投资建议。
     """
     bz: bazi.BaZiResult = ctx["bz"]
     lr_day = ctx["lr_day"]
@@ -787,9 +793,13 @@ def _invest(ctx) -> Dict:
         "不加杠杆、不碰合约。",
     ]
 
-    # ---- 数字资产：平台活动薅羊毛 + 观察清单（行情联网，失败自动降级）----
-    watch_syms = inv.get("watchlist") or None
-    assets = wool.build(ctx["target"], score, symbols=watch_syms,
+    # ---- A股复盘：最近一个交易日的市场事实（多源联网，全挂如实标注不可达）----
+    ashare = astock.fetch(offline=bool(ctx.get("offline")))
+
+    # ---- 数字资产：仅 BTC 观察清单（行情联网，失败自动降级）----
+    # 交易所活动推广板块已于 2026-11-09 整体删除；
+    # 观察清单不再受 profile.watchlist 影响，一律收敛为 BTC。
+    assets = wool.build(ctx["target"], score,
                         offline=bool(ctx.get("offline")))
 
     # ---- 彩票：以五门加权总分为主要参考，可给「不购买」建议，同一天只一个彩种 ----
@@ -842,14 +852,16 @@ def _invest(ctx) -> Dict:
         "headline": f"财气指数 {score:.0f}｜{action[0]}",
         "notes": notes,
         "crypto": crypto,
+        "astock": ashare,
         "assets": assets,
         "lottery": lottery_lines,
         "lottery_detail": lotto,
         "lottery_review": lotto_review,
         "lottery_score": lotto_score,
         "exchange": inv.get("crypto_exchange", "binance"),
-        "risk_banner": "⚠ 术数仅为文化视角参考，不构成投资建议。"
-                       "加密资产与彩票均为高风险，可能损失全部本金。",
+        "risk_banner": "⚠ 术数仅为文化视角参考，不构成投资建议；"
+                       "A股复盘只记录已发生事实、不预测方向。"
+                       "加密资产与彩票均为高风险，可能损失全部本金；股票投资亦可能亏损。",
     }
 
 
@@ -1061,7 +1073,9 @@ if __name__ == "__main__":
     for x in r["study"]["plan"]:
         print(" ", x)
     print("\n--- 健康 ---")
-    for x in r["health"]["training"]:
+    print(" ", r["health"]["constitution"], "|", r["health"]["diet_name"])
+    for x in r["health"]["diet_items"][:3]:
         print(" ", x)
+    print(" ", r["health"]["acu_name"])
     for x in r["health"]["qigong"]:
         print(" ", x)
