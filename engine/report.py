@@ -13,6 +13,9 @@ import os
 from datetime import datetime
 from typing import Dict, List
 
+from .almanac import render_almanac_text
+from .astock import render_astock_text
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(BASE_DIR, "output")
 
@@ -215,32 +218,16 @@ ul.tips li::before{content:"";position:absolute;left:5px;top:14px;width:6px;heig
   border-radius:9px;font-size:13.4px;line-height:1.8;color:#4a5a42}
 .cls-why{margin-top:10px;font-size:11.7px;color:#a09889;line-height:1.7}
 
-/* ---------- 数字资产：平台活动 + 观察清单 ---------- */
-.wadv{font-size:12.9px;color:#4a443c;background:#f3f8f8;border:1px dashed #cbe0e0;
-  border-radius:9px;padding:9px 13px;line-height:1.72;margin-bottom:12px}
-.wool{display:grid;gap:11px}
-.wcard{border:1px solid var(--line);border-left:3px solid var(--qing);
-  border-radius:10px;padding:11px 14px;background:#fffdf8}
-.wcard.warn{border-left-color:var(--zhu)}
-.wch{display:flex;align-items:baseline;gap:8px;margin-bottom:7px;flex-wrap:wrap}
-.wch .wn{font-size:13.7px;font-weight:700;color:#332e28}
-.wch .wk{font-size:10.5px;color:#fff;background:var(--qing);border-radius:3px;
-  padding:1px 6px;letter-spacing:.02em}
-.wcard.warn .wch .wk{background:var(--zhu)}
-.wch .ws{margin-left:auto;font-size:11px;color:#b9963f;letter-spacing:.06em}
-.wrow{display:grid;grid-template-columns:52px 1fr;gap:5px 10px;font-size:12.5px;
-  line-height:1.68}
-.wrow .k{color:#8c8478;font-weight:600}
-.wrow .v{color:#4a443c}
-.wrow .v.risk{color:#a4532f}
-.wcard.warn .wrow .v.risk{color:#b0402f;font-weight:600}
-.wlink{display:inline-block;margin-top:8px;font-size:12px;color:var(--qing);
-  text-decoration:none;border-bottom:1px dotted var(--qing)}
-.wglance{display:grid;gap:6px;margin-top:12px;padding-top:10px;
-  border-top:1px dashed var(--line)}
-.wg{font-size:12.3px;color:#5c544b;line-height:1.62}
-.wg .n{color:#332e28;font-weight:600}
-.wg .o{color:#8c8478}
+/* ---------- A股复盘 + 数字资产观察清单 ---------- */
+.astock-h{font-size:12.6px;color:#6a5b45;background:#fbf7ee;border:1px dashed var(--line);
+  border-radius:9px;padding:8px 12px;line-height:1.72;margin-bottom:10px}
+.astock-h b{color:var(--qing)}
+.astock-fail{font-size:13px;color:#7c3b32;background:#fdf3f1;border:1px solid #ecd6d1;
+  border-left:3px solid var(--zhu);border-radius:9px;padding:10px 13px;line-height:1.78}
+.astock-line{font-size:12.8px;color:#4a443c;line-height:1.82;margin:9px 0}
+.astock-line b{color:var(--qing)}
+.astock-line .up{color:#c0392b;font-weight:600}
+.astock-line .dn{color:#1f8a5b;font-weight:600}
 .wtable{width:100%;border-collapse:collapse;font-size:12.4px;margin-top:2px}
 .wtable th{text-align:left;font-weight:600;color:#8c8478;font-size:11.4px;
   padding:4px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -271,6 +258,35 @@ ul.tips li::before{content:"";position:absolute;left:5px;top:14px;width:6px;heig
 .lsn-link{display:inline-block;padding:5px 13px;border-radius:18px;font-size:12.2px;
   text-decoration:none;border:1px solid var(--line);background:#fff;color:#3d6b5a}
 .lsn-link:hover{background:#3d6b5a;color:#fff}
+
+/* ---------- 今日黄历（宜忌 / 忌日 / 神诞） ---------- */
+.al-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.al-badge{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12.5px;
+  font-weight:700;background:#f3ece0;color:#8a6d3b;border:1px solid var(--line)}
+.al-badge.good{background:#f1f7f2;color:#3d6b5a;border-color:#d9e7dc}
+.al-badge.bad{background:#fdf1ef;color:#b03030;border-color:#edd6d1}
+.al-meta{font-size:12.6px;color:var(--ink2)}
+.al-yj{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+@media(max-width:640px){.al-yj{grid-template-columns:1fr}}
+.al-yj .box{border:1px solid var(--line);border-radius:11px;padding:11px 14px;background:#fdfbf6}
+.al-yj h4{margin:0 0 7px;font-size:13px;letter-spacing:.1em}
+.al-yj .y{color:var(--qing)} .al-yj .j{color:var(--zhu)}
+.al-yj .txt{font-size:13.6px;line-height:1.85;color:#3f3a33}
+.al-line{font-size:12.9px;color:var(--ink2);line-height:1.8;margin:5px 0}
+.al-item{padding:10px 13px;border-radius:10px;margin-top:8px;font-size:13.1px;line-height:1.8}
+.al-item.warn{background:#fdf3f1;border:1px solid #ecd6d1;color:#7c3b32;border-left:3px solid var(--zhu)}
+.al-item.good{background:#f3f8f4;border:1px solid #dce9dd;color:#3c5c48;border-left:3px solid var(--qing)}
+.al-item.calm{background:#fbf7ee;border:1px solid var(--line);color:#6a5b45;border-left:3px solid var(--gold)}
+.al-src{margin-top:11px;font-size:11.8px;color:#a09889;line-height:1.7}
+.hero .al-brief{margin-top:9px;padding-top:9px;border-top:1px dashed var(--line);
+  font-size:13px;color:#6a5b45;line-height:1.75}
+.hp-base{background:#f7f5ef;border:1px solid var(--line);border-radius:10px;
+  padding:11px 13px;margin-bottom:12px;font-size:13.1px;line-height:1.82;color:#5b5347}
+.hp-base b{color:var(--qing)}
+.hp-sub{font-size:13px;font-weight:700;color:var(--qing);margin-bottom:6px}
+.hp-sub.gold{color:var(--gold)}
+.hp-note{margin-top:12px;padding-top:9px;border-top:1px dashed var(--line);
+  font-size:11.8px;color:#a09889;line-height:1.7}
 """
 
 
@@ -448,22 +464,48 @@ def _lesson_section(c: Dict) -> str:
     return f'<div class="lesson">{top}{"".join(body)}</div>'
 
 
-def _wool_card(w: Dict) -> str:
-    """一条羊毛通道的完整卡片。"""
-    warn = w.get("stars", 3) <= 1 or "高风险" in w.get("kind", "")
-    rows = [("门槛", w["need"], False), ("怎么薅", w["how"], False),
-            ("拿到什么", w["gain"], False), ("注意", w["risk"], True)]
-    body = "".join(
-        f'<div class="k">{k}</div><div class="v{" risk" if r else ""}">{_e(v)}</div>'
-        for k, v, r in rows)
-    return (
-        f'<div class="wcard{" warn" if warn else ""}">'
-        f'<div class="wch"><span class="wn">{_e(w["name"])}</span>'
-        f'<span class="wk">{_e(w["kind"])}</span>'
-        f'<span class="ws">{"★" * w["stars"]}{"☆" * (5 - w["stars"])}</span></div>'
-        f'<div class="wrow">{body}</div>'
-        f'<a class="wlink" href="{_e(w["link"])}" target="_blank">'
-        f'前往官网查看当期活动 ↗</a></div>')
+def _astock_section(a: Dict) -> str:
+    """浏览器版「A股复盘」：只列事实，涨红跌绿，不预测方向。"""
+    if not a:
+        return ""
+    if not a.get("ok"):
+        if a.get("reason") == "offline":
+            return '<div class="astock-h">离线模式：本次未抓取 A 股行情。</div>'
+        return ('<div class="astock-fail">行情数据获取失败（数据源不可达）：'
+                '东方财富 / 腾讯 / 新浪 / Yahoo 均未取到，本期不做复盘。</div>')
+    stamp = a.get("as_of") or a.get("date") or "数据源未提供时间戳"
+    head = (f'<div class="astock-h"><b>{_e(a.get("session") or "复盘")}</b>　'
+            f'数据 {_e(stamp)}　来源 {_e(a["source"])}</div>')
+    rows = []
+    for x in a["indices"]:
+        cls = "up" if x["chg"] >= 0 else "dn"
+        amt = (f'{x["amount_yi"]:,.0f} 亿'
+               if x.get("amount_yi") is not None else "—")
+        rows.append(
+            f'<tr><td class="nm">{_e(x["name"])}</td>'
+            f'<td>{x["close"]:,.2f}</td>'
+            f'<td><span class="{cls}">{x["chg"]:+.2f}%</span></td>'
+            f'<td>{amt}</td></tr>')
+    table = ('<table class="wtable"><thead><tr><th>指数</th><th>收盘 / 最新</th>'
+             '<th>涨跌幅</th><th>成交额</th></tr></thead><tbody>'
+             + "".join(rows) + '</tbody></table>')
+    lines = []
+    b = a.get("breadth")
+    if b:
+        lines.append(f'市场宽度：涨 <span class="up">{b["up"]}</span> 家 / '
+                     f'跌 <span class="dn">{b["down"]}</span> 家 / '
+                     f'平 {b["flat"]} 家')
+    if a.get("sectors_up"):
+        lines.append("领涨行业：" + "、".join(
+            f'{_e(x["name"])} <span class="up">{x["chg"]:+.2f}%</span>'
+            for x in a["sectors_up"]))
+    if a.get("sectors_down"):
+        lines.append("领跌行业：" + "、".join(
+            f'{_e(x["name"])} <span class="dn">{x["chg"]:+.2f}%</span>'
+            for x in a["sectors_down"]))
+    line_html = "".join(f'<div class="astock-line">{s}</div>' for s in lines)
+    return (head + table + line_html
+            + f'<div class="wfoot">注：{_e(a["disclaimer"])}</div>')
 
 
 def _watch_table(watch: Dict) -> str:
@@ -492,26 +534,17 @@ def _watch_table(watch: Dict) -> str:
 
 
 def _assets_section(inv: Dict) -> str:
-    """浏览器版「数字资产」：今日适配建议 + 重点通道 + 速览 + 观察清单 + 防坑。"""
+    """浏览器版「数字资产」：仅 BTC 观察清单（旧推广板块已整体删除）。"""
     a = inv.get("assets")
     if not a:
         return _tips(inv.get("crypto", []))
-    head = f'<div class="wadv">{_e(a["advice"])}</div>'
-    cards = f'<div class="wool">{"".join(_wool_card(w) for w in a["focus"])}</div>'
-    glance = "".join(
-        f'<div class="wg"><span class="n">{_e(w["name"])}</span>'
-        f'　<span class="o">{_e(w["one"])}</span></div>' for w in a["glance"])
-    glance = (f'<div class="wglance">{glance}'
-              f'<div class="wg o">常青通道库共 {a["total"]} 项，每日轮换推送。</div></div>')
-    watch = _watch_table(a["watch"])
     w = a["watch"]
-    ts = (f'　行情时间 {_e(w.get("ts", ""))}'
-          + (f'（数据源 {_e(w.get("source", ""))}）' if w.get("source") else "")
-          ) if w.get("ok") else ""
-    return (head + cards + glance
-            + f'<div class="wfoot">{_e(a["disclaimer"])}{ts}</div>'
-            + watch
-            + _tips(["防坑：" + s for s in a["safety"]][:4]))
+    ts = ""
+    if w.get("ok"):
+        ts = (f'　行情时间 {_e(w.get("ts", ""))}'
+              + (f'（数据源 {_e(w.get("source", ""))}）' if w.get("source") else ""))
+    return (_watch_table(w)
+            + f'<div class="wfoot">{_e(a["disclaimer"])}{ts}</div>')
 
 
 def _classic_section(c: Dict) -> str:
@@ -530,6 +563,44 @@ def _classic_section(c: Dict) -> str:
 
 
 # ---------------------------------------------------------------- 主渲染
+
+
+def _almanac_section(al: Dict) -> str:
+    """今日黄历栏：宜忌 / 值神 / 忌日 / 神诞 / 近期预告。"""
+    hd_cls = "good" if al["huangdao"] == "黄道" else "bad"
+    head = (
+        f'<div class="al-head">'
+        f'<span class="al-badge {hd_cls}">{_e(al["jianchu"])}日 · '
+        f'{_e(al["huangdao"])}（{_e(al["huangdao_god"])}）</span>'
+        f'<span class="al-badge">{_e(al["day_gz"])}日 · 农历{_e(al["lunar_label"])}</span>'
+        f'<span class="al-meta">喜神 {_e(al["xishen"])}</span>'
+        f'</div>')
+    yj = (f'<div class="al-yj">'
+          f'<div class="box"><h4 class="y">宜 · 今日所喜</h4>'
+          f'<div class="txt">{_e("、".join(al["yi"]))}</div></div>'
+          f'<div class="box"><h4 class="j">忌 · 今日所避</h4>'
+          f'<div class="txt">{_e("、".join(al["ji"]))}</div></div>'
+          f'</div>')
+    base = (f'<div class="al-line">值神简释：{_e(al["jianchu_note"])}</div>'
+            f'<div class="al-line">彭祖百忌：{_e(al["pengzu"])}</div>')
+    items = []
+    for x in al["special"]:
+        cls = ("warn" if x["level"] in ("大忌", "忌") else
+               "good" if x["level"] == "吉" else "calm")
+        items.append(f'<div class="al-item {cls}"><b>【{_e(x["level"])}】'
+                     f'{_e(x["name"])}</b>　{_e(x["note"])}</div>')
+    for x in al["deities"]:
+        items.append(f'<div class="al-item good"><b>【{_e(x["kind"])}】'
+                     f'{_e(x["name"])}</b>　{_e(x["note"])}</div>')
+    if al["observance"]:
+        items.append(f'<div class="al-line">例行：'
+                     f'{_e("；".join(al["observance"]))}</div>')
+    if al["upcoming"]:
+        items.append(f'<div class="al-line">近日提醒：'
+                     + _e("；".join(f'{x["date"]} {x["name"]}'
+                                   for x in al["upcoming"])) + '</div>')
+    src = f'<div class="al-src">注：{_e(al["source_note"])}</div>'
+    return head + yj + base + "".join(items) + src
 
 
 def render_html(r: Dict) -> str:
@@ -565,12 +636,16 @@ def render_html(r: Dict) -> str:
       <div class="box"><h4 class="j">忌</h4>{''.join(f'<p>· {_e(x)}</p>' for x in g['ji'])}</div>
     </div>"""
 
+    al = r.get("almanac") or {}
+    al_brief = (f'<div class="al-brief">今日黄历：{_e(al["one_line"])}</div>'
+                if al else "")
     body = []
     body.append(
         f'<div class="hero"><div class="brand">五 术 日 课</div>'
         f'<h1>{_e(m["date_str"])} · {_e(m["weekday"])}</h1>'
         f'<div class="sub">{_e(m["lunar_full"])}　|　{m["day_gz"]}日（{_e(m["day_nayin"])}）　|　'
         f'节气：{_e(m["jieqi"])}</div>'
+        f'{al_brief}'
         f'<div class="hero-row">{_ring(m["total"], m["grade"])}'
         f'<div class="chips">'
         f'<span class="chip">本命 <b>{_e(d["day_master"])}水 · {_e(d["pattern"])}</b></span>'
@@ -579,6 +654,9 @@ def render_html(r: Dict) -> str:
         f'<span class="chip">流年 <b>{_e(d["liunian"])}</b></span>'
         f'</div></div></div>')
 
+    if al:
+        body.append(_sec("历", "今日黄历 · 宜忌与神诞",
+                         _almanac_section(al)))
     body.append(_sec("盘", "本命提要", dest))
     if r.get("zhouyi"):
         body.append(_sec("卦", "每日一卦 · 大衍筮法", _gua_section(r["zhouyi"])))
@@ -591,16 +669,23 @@ def render_html(r: Dict) -> str:
     health_body = (
         f'<div style="font-size:15px;font-weight:600;margin-bottom:10px;color:#3f3a33">'
         f'{_e(he["headline"])}</div>'
-        f'<div style="font-size:13.4px;color:#7c7367;margin-bottom:12px">'
-        f'{_e("　".join(he["organ_tips"]))}</div>'
+        f'<div class="hp-base"><b>体质辨识</b>　{_e(he["constitution"])}'
+        f'　→　调理方向：{_e(he["direction"])}<br>'
+        f'<b>当前调理</b>　{_e(he["current_regimen"])}<br>'
+        f'<span style="color:#7c7367">{"　".join(_e(x) for x in he["organ_tips"])}</span></div>'
         f'<div class="grid2">'
-        f'<div><div style="font-size:13px;color:var(--qing);font-weight:700;margin-bottom:6px">'
-        f'■ 力量训练</div>{_tips(he["training"])}</div>'
-        f'<div><div style="font-size:13px;color:var(--qing);font-weight:700;margin-bottom:6px">'
-        f'■ 八部金刚功</div>{_tips(he["qigong"])}</div></div>'
-        f'<div style="font-size:13px;color:var(--gold);font-weight:700;margin:14px 0 6px">'
-        f'■ 营养补给</div>{_tips(he["nutrition"])}')
-    body.append(_sec("健", "健康 · 健身 · 金刚功", health_body, he["score"]))
+        f'<div><div class="hp-sub">■ 今日食疗 · {_e(he["diet_name"])}'
+        f'<span style="font-weight:400;color:#a09889;font-size:11.6px">'
+        f'　{_e(he["rotation_hint"])}</span></div>{_tips(he["diet_items"])}</div>'
+        f'<div><div class="hp-sub">■ 穴位拍拉按摩 · {_e(he["acu_name"])}</div>'
+        f'{_tips(he["acu_items"])}</div></div>'
+        f'<div class="hp-sub gold" style="margin:14px 0 6px">■ 饮食宜忌</div>'
+        f'{_tips(he["avoid"])}'
+        f'<div class="hp-sub gold" style="margin:14px 0 6px">'
+        f'■ 每日固定功课 · 八部金刚功</div>'
+        f'{_tips(he["routine"] + he["qigong"])}'
+        f'<div class="hp-note">注：{_e(he["disclaimer"])}</div>')
+    body.append(_sec("健", "健康 · 食疗 · 经络调理", health_body, he["score"]))
 
     car = r.get("career")
     if car:
@@ -706,13 +791,17 @@ def render_html(r: Dict) -> str:
                    f'<div style="font-size:15px;font-weight:600;margin:10px 0;color:#3f3a33">'
                    f'{_e(inv["headline"])}</div>{_tips(inv["notes"])}'
                    f'<div style="font-size:13px;color:var(--gold);font-weight:700;margin:14px 0 6px">'
-                   f'■ 数字资产（{_e(inv["exchange"].upper())}）· 平台活动薅羊毛</div>'
+                   f'■ A股复盘（市场事实层 · 日期以数据源为准）</div>'
+                   f'{_astock_section(inv.get("astock") or {})}'
+                   f'<div style="font-size:13px;color:var(--gold);font-weight:700;margin:14px 0 6px">'
+                   f'■ 数字资产（{_e(inv["exchange"].upper())}）· BTC 观察清单</div>'
                    f'{_assets_section(inv)}'
                    f'<div style="font-size:13px;color:var(--gold);font-weight:700;margin:14px 0 6px">'
                    f'■ 仓位与账户纪律</div>{_tips(inv["crypto"])}'
                    f'<div style="font-size:13px;color:var(--gold);font-weight:700;margin:14px 0 6px">'
                    f'■ 彩票娱乐</div>{_tips(inv["lottery"])}{lot_html}{rv_html}')
-    body.append(_sec("财", "投资 · 彩票 · 数字资产", invest_body, inv["score"]))
+    body.append(_sec("财", "投资 · A股复盘 · 数字资产 · 彩票",
+                     invest_body, inv["score"]))
 
     body.append(_sec("学", "传统文化学习 · 今日一课",
                      f'<div style="font-size:15px;font-weight:600;margin-bottom:10px;color:#3f3a33">'
@@ -742,6 +831,9 @@ def render_text(r: Dict) -> str:
     L.append(f"{m['date_str']} {m['weekday']}　{m['lunar_full']}　{m['day_gz']}日")
     L.append(f"综合运势 {m['total']:.0f} 分（{m['grade']}）　节气：{m['jieqi']}")
     L.append("")
+    if r.get("almanac"):
+        L.extend(render_almanac_text(r["almanac"]))
+        L.append("")
     if r.get("zhouyi"):
         z = r["zhouyi"]
         L.append(f"【每日一卦】{z['symbol']} {z['name']}（第{z['xu']}卦）　"
@@ -775,12 +867,26 @@ def render_text(r: Dict) -> str:
     L.append(f"  宜：{'、'.join(r['general']['yi'])}")
     L.append(f"  忌：{'、'.join(r['general']['ji'])}")
     L.append("")
-    L.append(f"【健康】{r['health']['headline']}")
-    L.append(f"  脏腑：{r['health']['organ']}")
-    for t in r["health"]["training"]:
+    he = r["health"]
+    L.append(f"【健康】{he['headline']}")
+    L.append(f"  体质辨识：{he['constitution']}　→　调理方向：{he['direction']}")
+    L.append(f"  当前调理：{he['current_regimen']}")
+    L.append(f"  脏腑：{he['organ']}")
+    for t in he["organ_tips"]:
         L.append(f"  · {t}")
-    for t in r["health"]["qigong"]:
+    L.append(f"  【今日食疗】{he['diet_name']}　|　{he['rotation_hint']}")
+    for t in he["diet_items"]:
         L.append(f"  · {t}")
+    L.append("  【饮食宜忌】")
+    for t in he["avoid"]:
+        L.append(f"  · {t}")
+    L.append(f"  【穴位拍拉按摩】{he['acu_name']}")
+    for t in he["acu_items"]:
+        L.append(f"  · {t}")
+    L.append("  【每日固定功课 · 八部金刚功】")
+    for t in he["routine"] + he["qigong"]:
+        L.append(f"  · {t}")
+    L.append(f"  注：{he['disclaimer']}")
     L.append("")
     L.append(f"【出行】{r['travel']['headline']}")
     for t in r["travel"]["tips"]:
@@ -804,28 +910,23 @@ def render_text(r: Dict) -> str:
     L.append(f"【投资】{r['invest']['headline']}")
     for t in r["invest"]["notes"][:3]:
         L.append(f"  · {t}")
+    _ak = r["invest"].get("astock") or {}
+    L.append("  ■ A股复盘（市场事实层 · 日期以数据源为准）")
+    for t in render_astock_text(_ak)[1:]:
+        L.append(t)
     _as = r["invest"].get("assets") or {}
     if _as:
-        L.append(f"  ■ 数字资产（{r['invest']['exchange'].upper()}）· 平台活动薅羊毛")
-        L.append(f"  · 今日适配：{_as['advice']}")
-        for w in _as["focus"]:
-            L.append(f"  · 【{w['name']}】{w['kind']} {'★' * w['stars']}"
-                     f"{'☆' * (5 - w['stars'])}")
-            for k, v in (("门槛", w["need"]), ("怎么薅", w["how"]),
-                         ("拿到什么", w["gain"]), ("注意", w["risk"])):
-                L.append(f"      {k}：{v}")
-            L.append(f"      官网：{w['link']}")
-        L.append("  · 速览：" + "；".join(
-            f"{w['name']}（{w['one']}）" for w in _as["glance"]))
-        L.append(f"  · 观察清单：{'、'.join(x['name'] for x in _as['watch']['rows'])}")
+        L.append(f"  ■ 数字资产（{r['invest']['exchange'].upper()}）· BTC 观察清单")
         for x in _as["watch"]["rows"]:
             if x.get("ok"):
                 L.append(f"      {x['name']:<4} {x['price_txt']:>12}  "
                          f"{x['chg']:+6.2f}%  {x['note']}")
+            else:
+                L.append(f"      {x['name']:<4} 行情未取到 —— {x['why']}")
         if _as["watch"].get("ok"):
             L.append(f"      行情时间 {_as['watch'].get('ts', '')}"
                      f"（数据源 {_as['watch'].get('source', '')}）")
-        L.append("  · 防坑：" + "　".join(_as["safety"][:3]))
+        L.append(f"      {_as['disclaimer']}")
     L.append("  ■ 仓位与账户纪律")
     for t in r["invest"]["crypto"]:
         L.append(f"  · {t}")
