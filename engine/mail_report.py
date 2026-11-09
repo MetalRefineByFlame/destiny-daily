@@ -199,6 +199,12 @@ def _glance(r: Dict) -> str:
 def _hero(r: Dict) -> str:
     m, d = r["meta"], r["destiny"]
     c = SCORE_COLOR[_tier_of(m["total"])]
+    al = r.get("almanac") or {}
+    al_brief = (
+        f'<tr><td colspan="2" style="padding-top:6px;'
+        f'{_f(12, "#6a5b45", "normal", 1.6)}">'
+        f'今日黄历：{_e(al["one_line"])}</td></tr>'
+        if al else "")
 
     chips = [
         ("本命", f'{d["day_master"]}水 · {d["pattern"]}'),
@@ -224,6 +230,7 @@ def _hero(r: Dict) -> str:
         f'<tr><td colspan="2" style="padding-top:5px;{_f(12.5, INK2, "normal", 1.6)}">'
         f'{_e(m["lunar_full"])}　|　{_e(m["day_gz"])}日'
         f'（{_e(m["day_nayin"])}）　|　节气：{_e(m["jieqi"])}</td></tr>'
+        + al_brief
         + _sp(16)
         + f'<tr>'
         f'<td width="96" valign="middle">'
@@ -235,6 +242,80 @@ def _hero(r: Dict) -> str:
         f'{_e(m["grade"])}</div></td></tr></table></td>'
         f'<td valign="middle" style="padding-left:6px">{chip_html}</td>'
         f'</tr></table></td></tr>' + _sp(14))
+
+
+# ---------------------------------------------------------------- 今日黄历
+
+
+def _almanac(r: Dict) -> str:
+    """今日宜忌 / 忌日 / 神诞。邮件端纯 table + 内联样式，不依赖 CSS 类。"""
+    al = r.get("almanac")
+    if not al:
+        return ""
+
+    hd_c = QING if al["huangdao"] == "黄道" else ZHU
+    head = (
+        f'<table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>'
+        f'<td style="{_f(12.5, hd_c, "700", 1.5)}padding:4px 11px;'
+        f'background:{SOFT};border:1px solid {LINE};border-radius:999px;'
+        f'white-space:nowrap">'
+        f'{_e(al["jianchu"])}日 · {_e(al["huangdao"])}'
+        f'（{_e(al["huangdao_god"])}）</td>'
+        f'<td style="{_f(12, INK2, "normal", 1.65)}padding-left:8px">'
+        f'{_e(al["day_gz"])}日　农历{_e(al["lunar_label"])}　'
+        f'喜神 {_e(al["xishen"])}</td></tr></table>')
+
+    def _box(label: str, text: str, color: str, pad: str) -> str:
+        return (
+            f'<td width="50%" valign="top" style="{pad}">'
+            f'<table width="100%" cellpadding="0" cellspacing="0" border="0" '
+            f'bgcolor="{SOFT}" style="background:{SOFT};border:1px solid {LINE};'
+            f'border-radius:10px;border-collapse:separate">'
+            f'<tr><td style="padding:9px 12px">'
+            f'<div style="{_f(12.5, color, "700", 1.5)}margin-bottom:5px">'
+            f'{_e(label)}</div>'
+            f'<div style="{_f(13, INK, "normal", 1.8)}">{_e(text)}</div>'
+            f'</td></tr></table></td>')
+
+    yj = (
+        f'<table width="100%" cellpadding="0" cellspacing="0" border="0" '
+        f'style="margin-top:10px"><tr>'
+        + _box("宜 · 今日所喜", "、".join(al["yi"]), QING, "padding-right:6px")
+        + _box("忌 · 今日所避", "、".join(al["ji"]), ZHU, "padding-left:6px")
+        + "</tr></table>")
+
+    base = (_note("值神简释：" + al["jianchu_note"], 12.3, INK2)
+            + _note("彭祖百忌：" + al["pengzu"], 12.3, INK2))
+
+    def _item(level: str, name: str, note: str, good: bool = False) -> str:
+        if level in ("大忌", "忌"):
+            bg, bd, fg = "#fdf3f1", "#e8cfc9", "#7c3b32"
+        elif good or level == "吉":
+            bg, bd, fg = "#f3f8f4", "#dce9dd", "#3c5c48"
+        else:
+            bg, bd, fg = SOFT2, LINE, "#6a5b45"
+        return (
+            f'<table width="100%" cellpadding="0" cellspacing="0" border="0" '
+            f'bgcolor="{bg}" style="background:{bg};border:1px solid {bd};'
+            f'border-left:3px solid {fg};border-radius:9px;'
+            f'border-collapse:separate;margin-top:8px">'
+            f'<tr><td style="padding:9px 12px;{_f(12.8, fg, "normal", 1.75)}">'
+            f'<b style="color:{fg};font-weight:700">【{_e(level)}】'
+            f'{_e(name)}</b>　{_e(note)}</td></tr></table>')
+
+    items = "".join(
+        _item(x["level"], x["name"], x["note"]) for x in al["special"])
+    items += "".join(
+        _item(x["kind"], x["name"], x["note"], good=True)
+        for x in al["deities"])
+    if al["observance"]:
+        items += _note("例行：" + "；".join(al["observance"]), 12.3, INK2)
+    if al["upcoming"]:
+        items += _note("近日提醒：" + "；".join(
+            f'{x["date"]} {x["name"]}' for x in al["upcoming"]), 12.3, INK2)
+    items += _note("注：" + al["source_note"], 11.5, INK3)
+
+    return _sec("历", "今日黄历 · 宜忌与神诞", head + yj + base + items)
 
 
 # ---------------------------------------------------------------- 本命提要
@@ -687,46 +768,66 @@ def _lesson_mail(c: Dict) -> str:
     return "".join(parts)
 
 
-def _wool_card_mail(w: Dict) -> str:
-    """一条羊毛通道卡片（table 布局，Outlook 安全）。"""
-    warn = w.get("stars", 3) <= 1 or "高风险" in w.get("kind", "")
-    bar = ZHU if warn else QING
-    rows = ""
-    for k, v, is_risk in (("门槛", w["need"], False), ("怎么薅", w["how"], False),
-                          ("拿到什么", w["gain"], False), ("注意", w["risk"], True)):
-        vc = "#b0402f" if (is_risk and warn) else ("#a4532f" if is_risk else INK)
-        rows += (
-            f'<tr><td width="54" valign="top" style="padding:3px 0;'
-            f'{_f(12.2, INK3, "600", 1.65)}">{_e(k)}</td>'
-            f'<td valign="top" style="padding:3px 0;{_f(12.4, vc, "normal", 1.68)}">'
-            f'{_e(v)}</td></tr>')
-    head = (
-        f'<table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>'
-        f'<td valign="middle" style="{_f(13.4, INK, "700", 1.5)}">'
-        f'{_e(w["name"])}</td>'
-        f'<td width="74" align="right" valign="middle" '
-        f'style="{_f(11, "#b9963f", "normal", 1.5)}white-space:nowrap">'
-        f'{"★" * w["stars"]}{"☆" * (5 - w["stars"])}</td></tr></table>')
-    badge = (
-        f'<table cellpadding="0" cellspacing="0" border="0" bgcolor="{bar}" '
-        f'style="background:{bar};border-radius:3px;border-collapse:separate">'
-        f'<tr><td style="padding:1px 7px;'
-        f'{_f(10.5, "#ffffff", "normal", 1.4)}">{_e(w["kind"])}</td></tr></table>')
-    btn = (
-        f'<table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="{bar}" '
-        f'style="background:{bar};border-radius:7px;border-collapse:separate;margin-top:9px">'
-        f'<tr><td align="center" style="padding:7px 10px">'
-        f'<a href="{_e(w["link"])}" target="_blank" '
-        f'style="{_f(12.4, "#ffffff", "700", 1.4)}text-decoration:none;display:block">'
-        f'前往官网查看当期活动 &gt;</a></td></tr></table>')
-    return (
-        f'<table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="{SOFT}" '
-        f'style="background:{SOFT};border:1px solid {LINE};border-left:3px solid {bar};'
-        f'border-radius:9px;border-collapse:separate;margin-top:9px">'
-        f'<tr><td style="padding:11px 13px">{head}'
-        f'<div style="margin-top:5px">{badge}</div>'
+def _astock_mail(a: Dict) -> str:
+    """邮件版「A股复盘」：table 布局 + 全内联样式，涨红跌绿（A股习惯）。"""
+    if not a:
+        return ""
+    if not a.get("ok"):
+        if a.get("reason") == "offline":
+            return _note("离线模式：本次未抓取 A 股行情。")
+        return (
+            f'<table width="100%" cellpadding="0" cellspacing="0" border="0" '
+            f'bgcolor="#fdf3f1" style="background:#fdf3f1;border:1px solid #e8cfc9;'
+            f'border-left:3px solid {ZHU};border-radius:8px;border-collapse:separate">'
+            f'<tr><td style="padding:10px 13px;{_f(12.8, "#7c3b32", "normal", 1.7)}">'
+            f'行情数据获取失败（数据源不可达）：东方财富 / 腾讯 / 新浪 / Yahoo 均未取到，'
+            f'本期不做复盘。</td></tr></table>')
+    stamp = a.get("as_of") or a.get("date") or "数据源未提供时间戳"
+    head = (f'<div style="{_f(12.4, INK2, "normal", 1.7)}margin-bottom:8px">'
+            f'<b style="color:{QING}">{_e(a.get("session") or "复盘")}</b>　'
+            f'数据 {_e(stamp)}　来源 {_e(a["source"])}</div>')
+    trs = ""
+    for x in a["indices"]:
+        cc = ZHU if x["chg"] >= 0 else "#1f7a52"
+        amt = (f'{x["amount_yi"]:,.0f} 亿'
+               if x.get("amount_yi") is not None else "—")
+        trs += (
+            f'<tr>'
+            f'<td valign="top" style="padding:6px 5px;border-bottom:1px dotted {LINE};'
+            f'{_f(12.4, INK, "700", 1.55)}">{_e(x["name"])}</td>'
+            f'<td align="right" valign="top" style="padding:6px 5px;'
+            f'border-bottom:1px dotted {LINE};{_f(12.4, INK, "600", 1.55)}'
+            f'white-space:nowrap">{x["close"]:,.2f}</td>'
+            f'<td align="right" valign="top" style="padding:6px 5px;'
+            f'border-bottom:1px dotted {LINE};{_f(12.4, cc, "700", 1.55)}'
+            f'white-space:nowrap">{x["chg"]:+.2f}%</td>'
+            f'<td align="right" valign="top" style="padding:6px 5px;'
+            f'border-bottom:1px dotted {LINE};{_f(12.2, INK2, "normal", 1.55)}'
+            f'white-space:nowrap">{amt}</td></tr>')
+    table = (
         f'<table width="100%" cellpadding="0" cellspacing="0" border="0" '
-        f'style="margin-top:7px">{rows}</table>{btn}</td></tr></table>')
+        f'bgcolor="{SOFT}" style="background:{SOFT};border:1px solid {LINE};'
+        f'border-radius:9px;border-collapse:separate">'
+        f'<tr style="background:{SOFT2}">'
+        f'<th align="left" style="padding:5px;{_f(11.2, INK3, "600", 1.5)}">指数</th>'
+        f'<th align="right" style="padding:5px;{_f(11.2, INK3, "600", 1.5)}">收盘 / 最新</th>'
+        f'<th align="right" style="padding:5px;{_f(11.2, INK3, "600", 1.5)}">涨跌幅</th>'
+        f'<th align="right" style="padding:5px;{_f(11.2, INK3, "600", 1.5)}">成交额</th>'
+        f'</tr>{trs}</table>')
+    lines = []
+    b = a.get("breadth")
+    if b:
+        lines.append(f'市场宽度：涨 {b["up"]} / 跌 {b["down"]} / 平 {b["flat"]} 家')
+    if a.get("sectors_up"):
+        lines.append("领涨行业：" + "、".join(
+            f'{_e(x["name"])} {x["chg"]:+.2f}%' for x in a["sectors_up"]))
+    if a.get("sectors_down"):
+        lines.append("领跌行业：" + "、".join(
+            f'{_e(x["name"])} {x["chg"]:+.2f}%' for x in a["sectors_down"]))
+    extra = "".join(
+        f'<div style="{_f(12.3, INK2, "normal", 1.68)}margin-top:6px">{s}</div>'
+        for s in lines)
+    return head + table + extra + _note(a["disclaimer"], 11.5)
 
 
 def _watch_mail(watch: Dict) -> str:
@@ -771,34 +872,17 @@ def _watch_mail(watch: Dict) -> str:
 
 
 def _assets_sec_mail(inv: Dict) -> str:
-    """邮件版「数字资产」：今日适配 + 重点通道 + 速览 + 观察清单 + 防坑。"""
+    """邮件版「数字资产」：仅 BTC 观察清单（旧推广板块已整体删除）。"""
     a = inv.get("assets")
     if not a:
         return _tips(inv.get("crypto", []), 13.2)
-    adv = (
-        f'<table width="100%" cellpadding="0" cellspacing="0" border="0" '
-        f'bgcolor="#f3f8f8" style="background:#f3f8f8;border:1px dashed #cbe0e0;'
-        f'border-radius:9px;border-collapse:separate">'
-        f'<tr><td style="padding:9px 12px;{_f(12.9, INK, "normal", 1.7)}">'
-        f'{_e(a["advice"])}</td></tr></table>')
-    cards = "".join(_wool_card_mail(w) for w in a["focus"])
-    glance = "".join(
-        f'<div style="{_f(12.3, INK2, "normal", 1.62)}margin-top:5px">'
-        f'<b style="color:{INK};font-weight:700">{_e(w["name"])}</b>　'
-        f'{_e(w["one"])}</div>' for w in a["glance"])
-    glance += (f'<div style="{_f(11.3, INK3, "normal", 1.6)}margin-top:6px">'
-               f'常青通道库共 {a["total"]} 项，每日轮换推送。</div>')
     _wk = a["watch"]
-    ts = (f'　行情时间 {_e(_wk.get("ts", ""))}'
-          + (f'（数据源 {_e(_wk.get("source", ""))}）' if _wk.get("source") else "")
-          ) if _wk.get("ok") else ""
-    return (adv + cards
-            + f'<div style="margin-top:12px">{glance}</div>'
-            + _note(a["disclaimer"] + ts)
-            + _sub("■ 观察清单（只列事实，不做推荐）", GOLD)
-            + _watch_mail(a["watch"])
-            + _sub("■ 防坑提醒", GOLD)
-            + _tips(a["safety"][:4], 12.4))
+    ts = ""
+    if _wk.get("ok"):
+        ts = (f'　行情时间 {_e(_wk.get("ts", ""))}'
+              + (f'（数据源 {_e(_wk.get("source", ""))}）'
+                 if _wk.get("source") else ""))
+    return _watch_mail(_wk) + _note(a["disclaimer"] + ts, 11.5)
 
 
 def _classic_sec(r: Dict) -> str:
@@ -856,7 +940,10 @@ def render_mail_html(r: Dict) -> str:
     g, tr, he, soc, inv, st = (r["general"], r["travel"], r["health"],
                                r["social"], r["invest"], r["study"])
 
-    body = [_hero(r), _glance(r), _sp(14), _destiny(r)]
+    body = [_hero(r)]
+    if r.get("almanac"):
+        body.append(_almanac(r))
+    body += [_glance(r), _sp(14), _destiny(r)]
     if r.get("zhouyi"):
         body.append(_gua(r))
     body.append(_sec("五", "五门评分", _bars(r["five"])))
@@ -867,17 +954,35 @@ def render_mail_html(r: Dict) -> str:
 
     health = (
         _lead(he["headline"])
-        + f'<div style="{_f(12.8, "#7c7367", "normal", 1.65)}margin-bottom:12px">'
-        + _e("　".join(he["organ_tips"])) + "</div>"
+        + f'<div style="{_f(12.8, INK2, "normal", 1.75)}background:{SOFT2};'
+          f'border:1px solid {LINE};border-radius:10px;padding:11px 13px;'
+          f'margin-bottom:12px">'
+          f'<span style="{_f(12.8, QING, "700", 1.75)}">体质辨识</span>　'
+          f'{_e(he["constitution"])}　→　调理方向：{_e(he["direction"])}<br>'
+          f'<span style="{_f(12.8, QING, "700", 1.75)}">当前调理</span>　'
+          f'{_e(he["current_regimen"])}<br>'
+          f'<span style="{_f(12.3, INK3, "normal", 1.7)}">'
+          f'{_e("　".join(he["organ_tips"]))}</span></div>'
         + f'<table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>'
-        f'<td width="50%" valign="top" style="padding-right:7px">'
-        f'<div style="{_f(12.5, QING, "700", 1.5)}margin-bottom:5px">■ 力量训练</div>'
-        f'{_tips(he["training"], 13.5)}</td>'
-        f'<td width="50%" valign="top" style="padding-left:7px">'
-        f'<div style="{_f(12.5, QING, "700", 1.5)}margin-bottom:5px">■ 八部金刚功</div>'
-        f'{_tips(he["qigong"], 13.5)}</td></tr></table>'
-        + _sub("■ 营养补给") + _tips(he["nutrition"], 13.5))
-    body.append(_sec("健", "健康 · 健身 · 金刚功", health, he["score"]))
+          f'<td width="50%" valign="top" style="padding-right:7px">'
+          f'<div style="{_f(12.5, QING, "700", 1.5)}margin-bottom:4px">'
+          f'■ 今日食疗 · {_e(he["diet_name"])}</div>'
+          f'<div style="{_f(11.5, INK3, "normal", 1.5)}margin-bottom:5px">'
+          f'{_e(he["rotation_hint"])}</div>'
+          f'{_tips(he["diet_items"], 13)}</td>'
+          f'<td width="50%" valign="top" style="padding-left:7px">'
+          f'<div style="{_f(12.5, QING, "700", 1.5)}margin-bottom:5px">'
+          f'■ 穴位拍拉按摩</div>'
+          f'<div style="{_f(11.8, GOLD, "700", 1.5)}margin-bottom:5px">'
+          f'{_e(he["acu_name"])}</div>'
+          f'{_tips(he["acu_items"], 13)}</td></tr></table>'
+        + _sub("■ 饮食宜忌") + _tips(he["avoid"], 13.5)
+        + _sub("■ 每日固定功课 · 八部金刚功")
+        + _tips(he["routine"] + he["qigong"], 13.5)
+        + f'<div style="{_f(11.5, INK3, "normal", 1.7)}margin-top:12px;'
+          f'padding-top:9px;border-top:1px dashed {LINE}">'
+          f'注：{_e(he["disclaimer"])}</div>')
+    body.append(_sec("健", "健康 · 食疗 · 经络调理", health, he["score"]))
 
     car = r.get("career")
     if car:
@@ -904,7 +1009,9 @@ def render_mail_html(r: Dict) -> str:
         + f'<div style="{_f(14.5, "#3f3a33", "600", 1.7)}margin:12px 0 10px">'
         + _e(inv["headline"]) + "</div>"
         + _tips(inv["notes"])
-        + _sub(f'■ 数字资产（{inv["exchange"].upper()}）· 平台活动薅羊毛')
+        + _sub("■ A股复盘（市场事实层 · 日期以数据源为准）")
+        + _astock_mail(inv.get("astock") or {})
+        + _sub(f'■ 数字资产（{inv["exchange"].upper()}）· BTC 观察清单')
         + _assets_sec_mail(inv)
         + _sub("■ 仓位与账户纪律")
         + _tips(inv["crypto"], 13.2)
@@ -912,7 +1019,8 @@ def render_mail_html(r: Dict) -> str:
         + _tips(inv["lottery"], 13.2)
         + _lottery(inv)
         + _lottery_review(inv))
-    body.append(_sec("财", "投资 · 彩票 · 数字资产", invest, inv["score"]))
+    body.append(_sec("财", "投资 · A股复盘 · 数字资产 · 彩票",
+                     invest, inv["score"]))
 
     body.append(_sec("学", "传统文化学习 · 今日一课",
                      _lead(st["headline"]) + _lesson_mail(st.get("lesson"))
