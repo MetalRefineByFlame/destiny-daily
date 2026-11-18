@@ -175,18 +175,20 @@ jobs:
           mkdir -p output
           python daily_run.py --stdout-text
 
-      # 开奖数据源自检：福彩官网/体彩官网按 IP 属地封锁，境外出口一律 403，
+      # 行情/开奖数据源自检：福彩官网/体彩官网按 IP 属地封锁，境外出口一律 403，
       # 代码会自动切换到 500 彩票网的备用源。这里只做可见性检查——
       # 真出现「取数失败」时在 Actions 日志里打个 warning，别让它再静默溜过去。
+      # 注意：文案是「开奖数据暂时获取失败（数据源不可达）」，2026-11-18 发现
+      # 老写法 grep「取数失败」永远匹配不上，等于自检形同虚设，这里改正。
       - name: 行情数据源自检
         continue-on-error: true
         run: |
           TXT=$(ls -1t output/destiny-*.txt | head -1)
-          if grep -q "取数失败" "$TXT"; then
-            echo "::warning::开奖数据源全部不可达，本期核对缺失（官方站与备用源均失败）"
-            grep -n "取数失败" "$TXT" || true
+          if grep -q "获取失败（数据源不可达）" "$TXT"; then
+            echo "::warning::有数据源不可达（开奖核对或行情缺失），本期对应段落已如实标注"
+            grep -n "获取失败（数据源不可达）" "$TXT" || true
           else
-            echo "开奖数据源正常"
+            echo "数据源正常"
           fi
           # A股复盘：东财/腾讯/新浪在境内可达，Yahoo 补 GitHub Actions 境外节点。
           # 四源全挂时报告会写明「不可达」，这里在日志里留一条可见 warning，
