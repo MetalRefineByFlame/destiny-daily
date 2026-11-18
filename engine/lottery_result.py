@@ -24,9 +24,11 @@
 """
 from __future__ import annotations
 
+import gzip
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta
@@ -44,6 +46,8 @@ UA = {
 }
 
 TIMEOUT = 12
+XML_TIMEOUT = 30       # 备用源整份 XML 约 470KB，且服务器在境内；跨洋链路 12s 常不够
+XML_ATTEMPTS = 3       # 备用源重试次数（每次换缓存键，绕开 CDN 陈旧副本）
 REVIEW_WINDOW = 1      # 只核对「昨日」的推荐（用户要求：只给最近一天）
 SHOW_WINDOW = 1        # 报告里只展示 1 条
 
@@ -111,37 +115,40 @@ _DRAW_SHAPE = {"双色球": (6, 1), "大乐透": (5, 2), "快乐8": (20, 0)}
 _FETCH_STATE: Dict[str, Dict] = {}
 
 
-def _http_text(url: str, referer: str = "") -> Optional[str]:
-    """取纯文本（HTML / XML 数据源）。失败返回 None。"""
+def _http_text(url: str, referer: str = "", timeout: int = TIMEOUT,
+               use_gzip: bool = False) -> Optional[str]:
+    """取纯文本（HTML / XML 数据源）。失败返回 None。
+
+    use_gzip=True 时声明 Accept-Encoding: gzip 并自行解压 —— 备用源整份
+    XML 有 470KB，压缩后约 1/6，跨洋链路的传输时间随之大幅缩短。
+    """
     h = dict(UA)
     if referer:
         h["Referer"] = referer
+    if use_gzip:
+        h["Accept-Encoding"] = "gzip"
     try:
         req = urllib.request.Request(url, headers=h)
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read()
+            enc = (resp.headers.get("Content-Encoding") or "").lower()
     except (urllib.error.URLError, urllib.error.HTTPError, ValueError, OSError):
         return None
-    for enc in ("utf-8", "gb18030"):
+    if use_gzip and "gzip" in enc:
         try:
-            return raw.decode(enc)
+            raw = gzip.decompress(raw)
+        except (OSError, EOFError):
+            return None
+    for enc_ in ("utf-8", "gb18030"):
+        try:
+            return raw.decode(enc_)
         except UnicodeDecodeError:
             continue
     return raw.decode("utf-8", "replace")
 
 
-def _500(game: str, count: int) -> List[Dict]:
-    """
-    500 彩票网 XML：<row expect="期号" opencode="号码" opentime="开奖时间"/>
-      opencode 用 | 分隔前后区：双色球 6+1、大乐透 5+2、快乐8 无分隔（20 个）。
-    """
-    code = _XML_500_CODE.get(game)
-    if not code:
-        return []
-    txt = _http_text(_XML_500_URL.format(code=code),
-                     referer="https://kaijiang.500.com/")
-    if not txt:
-        return []
+def _parse_500(txt: str, game: str, count: int) -> List[Dict]:
+    """解析 500 彩票网 XML 文本。<row expect="期号" opencode="号码" opentime="开奖时间"/>"""
     out: List[Dict] = []
     shape = _DRAW_SHAPE.get(game)
     for m in re.finditer(r"<row\b([^>]*?)/?>", txt):
@@ -169,6 +176,41 @@ def _500(game: str, count: int) -> List[Dict]:
     return out
 
 
+def _500(game: str, count: int) -> List[Dict]:
+    """
+    500 彩票网 XML（备用源）：带重试 + 缓存键。
+
+    为什么必须重试、必须换缓存键：
+      1) 该源是境内服务器，境外 CI 下载 470KB 偶发超时（12s 老超时太紧）；
+      2) 文件在 21:23 左右才写入当日开奖，CDN 边缘若在写入前缓存过，就会
+         一直返回旧副本 —— 表现为「源可达但没有昨日的开奖」，文案却显示
+         「尚未公布」，等于把取数问题又伪装成官方未开奖。
+      每次请求追加 ?_=<时间戳+序号> 使 CDN 不复用旧副本，直接回源。
+    """
+    code = _XML_500_CODE.get(game)
+    if not code:
+        return []
+    base = _XML_500_URL.format(code=code)
+    tries: List[str] = []
+    for attempt in range(XML_ATTEMPTS):
+        sep = "&" if "?" in base else "?"
+        url = f"{base}{sep}_={int(time.time())}{attempt}"
+        txt = _http_text(url, referer="https://kaijiang.500.com/",
+                         timeout=XML_TIMEOUT, use_gzip=True)
+        if not txt:
+            tries.append("fetch-failed")
+        else:
+            rows = _parse_500(txt, game, count)
+            if rows:
+                _FETCH_STATE.setdefault(game, {})["tries_500"] = tries + ["ok"]
+                return rows
+            tries.append("parse-empty")
+        if attempt + 1 < XML_ATTEMPTS:
+            time.sleep(2 * (attempt + 1))
+    _FETCH_STATE.setdefault(game, {})["tries_500"] = tries
+    return []
+
+
 def fetch_draws(game: str, count: int = 20) -> List[Dict]:
     """
     取该彩种最近若干期开奖。官方源优先，不可达时自动切备用源。
@@ -188,24 +230,41 @@ def fetch_draws(game: str, count: int = 20) -> List[Dict]:
     except Exception as exc:      # noqa: BLE001
         err = f"official:{type(exc).__name__}"
     if out:
-        _FETCH_STATE[game] = {"ok": True, "source": "official", "reason": ""}
+        _FETCH_STATE[game] = {"ok": True, "source": "official", "reason": "",
+                              "latest": out[0].get("date", "")}
         return out
 
     backup = _500(game, count)
     if backup:
-        _FETCH_STATE[game] = {"ok": True, "source": "500", "reason": ""}
+        _FETCH_STATE[game] = {"ok": True, "source": "500", "reason": "",
+                              "latest": backup[0].get("date", ""),
+                              "tries_500": (_FETCH_STATE.get(game) or {}).get("tries_500")}
         return backup
 
+    tries = (_FETCH_STATE.get(game) or {}).get("tries_500") or []
     _FETCH_STATE[game] = {"ok": False, "source": "",
-                          "reason": err or "all-sources-unreachable"}
+                          "reason": err or "all-sources-unreachable",
+                          "tries_500": tries}
+    print(f"[draw] {game} 取数失败：official/500 均未取到"
+          f"（500 尝试 {len(tries)} 次：{','.join(tries) or '-'}）")
     return []
 
 
 def find_draw(game: str, date: str) -> Optional[Dict]:
     """取该彩种在 date 当日（或当日之后最近一期）的开奖。命中不了当日则 None。"""
-    for d in fetch_draws(game):
+    draws = fetch_draws(game)
+    for d in draws:
         if d["date"] == date:
             return d
+    # 源可达却没有该日记录：可能是 CDN 陈旧副本，隔两秒换缓存键再取一次
+    state = _FETCH_STATE.get(game) or {}
+    if state.get("ok") and draws:
+        time.sleep(2)
+        for d in fetch_draws(game):
+            if d["date"] == date:
+                return d
+        print(f"[draw] {game} 第二次取数仍无 {date} 的开奖"
+              f"（最新一期 {draws[0].get('date', '')}，来源 {state.get('source')}）")
     return None
 
 
