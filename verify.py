@@ -814,6 +814,112 @@ check("备用源·双色球按 | 拆分前后区",
       (_s5[0]["front"], _s5[0]["back"]) if _s5 else None,
       ([1, 2, 4, 17, 19, 30], [9]))
 
+# ---- 备用源抗抖动：gzip 压缩、重试、缓存键、形态校验 ----
+# 背景：2026-11-18 云端早报再次没读到双色球开奖（11-17 第 2026132 期其实 21:23 就已公布）。
+# 代码与本地逐字节一致、官方站对境外 403 属已知，因此问题只可能出在备用源这一跳：
+#   ① 整份 XML 470KB，跑在 Azure 上跨洋下载，12s 老超时容易整段超时；
+#   ② 文件 21:23 才写入，CDN 边缘若早于写入缓存过，就会长期返回缺当日开奖的旧副本，
+#      而状态仍判「源可达」→ 文案又变成「尚未公布」。
+# 下面几条钉死这三处：必须请求 gzip、必须重试并换缓存键、形态不符必须丢弃。
+import gzip as _gz  # noqa: E402
+import urllib.request as _urlreq  # noqa: E402
+
+
+class _FakeResp:
+    def __init__(self, body, headers=None):
+        self._body = body
+        self.headers = headers or {}
+
+    def read(self):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+_orig_open = _urlreq.urlopen
+_caps = []
+try:
+    def _fake_open(req, timeout=None):
+        _caps.append((req, timeout))
+        return _FakeResp(_gz.compress(_XML_SAMPLE.encode("utf-8")),
+                         {"Content-Encoding": "gzip"})
+
+    _urlreq.urlopen = _fake_open
+    _txt_gz = _lr._http_text("https://example.invalid/x.xml", use_gzip=True,
+                             timeout=_lr.XML_TIMEOUT)
+finally:
+    _urlreq.urlopen = _orig_open
+_hdrs = {k.lower(): v for k, v in _caps[0][0].header_items()} if _caps else {}
+check("备用源请求声明 gzip", "gzip" in str(_hdrs.get("accept-encoding", "")), True)
+check("备用源超时用 XML_TIMEOUT", _caps[0][1] if _caps else None, _lr.XML_TIMEOUT)
+check("gzip 响应能正确解压", _txt_gz == _XML_SAMPLE, True)
+
+# 形态校验：快乐8 只接受 20 个号，一条 6+1 的串不能混进来
+_bad = ('<xml><row expect="1" opencode="01,02,03,04,05,06|07" '
+        'opentime="2026-11-17 21:15:00"/></xml>')
+check("备用源丢弃形态不符的行", _lr._parse_500(_bad, "快乐8", 5), [])
+check("备用源正常行不被误丢",
+      len(_lr._parse_500(_XML_SAMPLE, "双色球", 5)), 1)
+
+# 重试：前两次取不到，第三次成功；且每次 URL 都换缓存键
+_orig_text2 = _lr._http_text
+_seen = []
+
+
+def _flaky(url, *a, **k):
+    _seen.append(url)
+    return None if len(_seen) < 3 else _XML_SAMPLE
+
+
+try:
+    _lr._http_text = _flaky
+    _lr._FETCH_STATE.pop("双色球", None)
+    _r500 = _lr._500("双色球", 5)
+finally:
+    _lr._http_text = _orig_text2
+check("备用源失败后重试取到数据", bool(_r500), True)
+check("备用源重试次数为 3", len(_seen), 3)
+check("备用源每次换缓存键", len(set(_seen)), 3)
+check("备用源 URL 带缓存键参数", all("?_=" in u for u in _seen), True)
+
+# 三次全失败：返回空，并把尝试记录留在状态里（供日志定位）
+_orig_text3 = _lr._http_text
+try:
+    _lr._http_text = lambda *a, **k: None
+    _lr._FETCH_STATE.pop("双色球", None)
+    check("备用源三次全失败返回空", _lr._500("双色球", 5), [])
+    check("备用源失败尝试被记录",
+          len((_lr._FETCH_STATE.get("双色球") or {}).get("tries_500") or []), 3)
+finally:
+    _lr._http_text = _orig_text3
+
+# 源可达但无当日记录（CDN 陈旧副本）→ find_draw 必须再取一次，不能直接判未公布
+_orig_fd = _lr.fetch_draws
+_calls = {"n": 0}
+
+
+def _fake_fd(game, count=20):
+    _calls["n"] += 1
+    if _calls["n"] == 1:
+        _lr._FETCH_STATE[game] = {"ok": True, "source": "500"}
+        return [{"date": "2026-11-15", "issue": "26131",
+                 "front": [1, 10, 19, 26, 31, 33], "back": [15]}]
+    return [{"date": "2026-11-17", "issue": "26132",
+             "front": [5, 9, 13, 17, 18, 21], "back": [11]}]
+
+
+try:
+    _lr.fetch_draws = _fake_fd
+    _fd = _lr.find_draw("双色球", "2026-11-17")
+finally:
+    _lr.fetch_draws = _orig_fd
+check("源可达但缺当日·二次取数命中", bool(_fd and _fd.get("issue") == "26132"), True)
+check("源可达但缺当日·确实重取一次", _calls["n"], 2)
+
 _orig_cwl, _orig_dlt, _orig_500 = _lr._cwl, _lr._dlt, _lr._500
 try:
     _lr._cwl = lambda *a, **k: []          # 模拟境外：官方接口 403 → 空
@@ -1094,6 +1200,9 @@ check("工作流注入调理覆盖 Secret", "secrets.DESTINY_THERAPY" in _wf, Tr
 check("缺 Secret 时有可见 warning", "::warning::未配置 DESTINY_CONSTITUTION" in _wf, True)
 _seg = _wf.split("::warning::未配置 DESTINY_CONSTITUTION")[1][:200]
 check("缺 Secret 不阻断发信", "exit 1" in _seg, False)
+# 自检步骤必须 grep 报告里真实存在的文案，否则等于没查（2026-11-18 发现的空转）
+check("自检 grep 文案与报告一致", "获取失败（数据源不可达）" in _wf, True)
+check("自检不再 grep 不存在的旧文案", 'grep -q "取数失败"' in _wf, False)
 _gi = open(".gitignore", encoding="utf-8").read()
 check("本地私有 Secret 值文件被忽略", "data/*.local.json" in _gi, True)
 
